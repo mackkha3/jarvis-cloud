@@ -88,6 +88,9 @@ def create_app() -> Flask:
             "message": "Something broke. Check the logs.",
         }), 500
 
+    # ====== REGISTER ADDITIONAL ROUTES ======
+    register_chat_routes(app)
+
     # ====== STARTUP LOG ======
     logger.info("=" * 60)
     logger.info("JARVIS Cloud — Flask API initialized")
@@ -98,3 +101,41 @@ def create_app() -> Flask:
     logger.info("=" * 60)
 
     return app
+
+
+def register_chat_routes(app: Flask) -> None:
+    """Register Claude-powered chat endpoints."""
+    from flask import request
+    from app.core.claude import JarvisAI
+
+    # One AI instance per app lifecycle
+    ai = JarvisAI()
+
+    @app.route("/api/chat", methods=["POST"])
+    @require_api_key
+    def chat():
+        """
+        Main chat endpoint. Accepts a query, routes through 3-layer system.
+
+        Body: {"query": "What time is it?", "context": "optional extra context"}
+        Returns: {"response": "...", "layer": 1, "model": "local", "tokens": {...}}
+        """
+        data = request.get_json(silent=True) or {}
+        query = data.get("query", "").strip()
+
+        if not query:
+            return jsonify({
+                "error": "Bad Request",
+                "message": "Field 'query' is required.",
+            }), 400
+
+        context = data.get("context")
+        result = ai.respond(query, context=context)
+        return jsonify(result)
+
+    @app.route("/api/chat/clear", methods=["POST"])
+    @require_api_key
+    def clear_chat():
+        """Clear conversation history."""
+        ai.clear_history()
+        return jsonify({"message": "Conversation history cleared."})
