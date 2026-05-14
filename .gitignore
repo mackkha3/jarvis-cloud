@@ -1,0 +1,58 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Environment & secrets — NEVER commit these
+.env
+.env.local
+.env.production
+*.env
+credentials.json
+*token.json
+*_token.json
+
+# Logs
+logs/
+*.log
+
+# Audio files (debugging artifacts)
+*.wav
+*.mp3
+*.ogg
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+vector_store/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+dist/
+build/
+node_modules/
+
+# Conversation memory dumps (may contain personal info)
+conversation.json
+memory_store/
+token_usage.json

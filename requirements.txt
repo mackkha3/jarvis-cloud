@@ -1,0 +1,36 @@
+# ===== JARVIS Cloud — Core Dependencies =====
+# Pinned versions for reproducible deployments
+# Last reviewed: 2026-05-14
+
+# --- Web framework ---
+flask==3.0.3
+flask-cors==4.0.1
+gunicorn==23.0.0
+
+# --- Environment & config ---
+python-dotenv==1.0.1
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# --- AI / LLM ---
+anthropic==0.39.0
+
+# --- Google integrations ---
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+google-api-python-client==2.149.0
+
+# --- HTTP & API utilities ---
+requests==2.32.3
+httpx==0.27.2
+
+# --- Date & time handling ---
+python-dateutil==2.9.0.post0
+pytz==2024.2
+
+# --- Logging & observability ---
+structlog==24.4.0
+
+# --- Security ---
+cryptography==43.0.1
