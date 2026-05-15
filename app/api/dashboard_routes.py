@@ -340,6 +340,81 @@ def register_dashboard_routes(app: Flask) -> None:
             logger.exception(f"Evening briefing endpoint error: {e}")
             return jsonify({"error": str(e)}), 500
 
+    # ====== EMAIL DIGEST ======
+
+    @app.route("/digest")
+    @app.route("/digest/")
+    def digest_page():
+        """Email intelligence digest page — ported from email-triage/digest.html."""
+        try:
+            from app.briefings.digest_html import generate_digest_html
+            from flask import Response
+            html = generate_digest_html()
+            return Response(html, mimetype="text/html")
+        except Exception as e:
+            logger.exception(f"Digest page error: {e}")
+            return f"<h1>Error generating digest: {e}</h1>", 500
+
+    @app.route("/api/digest/full", methods=["GET"])
+    @require_api_key
+    def digest_full():
+        """Full categorized email list — 30 emails with category tags."""
+        try:
+            from app.integrations.google import GoogleGmail
+            gmail = GoogleGmail()
+            if not gmail.available:
+                return jsonify({"emails": [], "error": "Gmail unavailable"})
+
+            raw_emails = gmail.get_recent_emails(max_results=30)
+            unread_count = gmail.get_unread_count()
+
+            _urgent = ["urgent", "asap", "immediately", "critical",
+                       "important", "deadline", "overdue", "action required"]
+            _reply  = ["reply", "response", "please respond", "let me know",
+                       "following up", "follow up", "can you", "could you",
+                       "waiting", "awaiting"]
+            _fyi    = ["fyi", "for your information", "heads up", "update",
+                       "newsletter", "notification", "alert", "reminder"]
+            _scores = {"urgent": 9, "reply_needed": 7, "fyi": 5, "clean": 2}
+
+            result = []
+            for email in raw_emails:
+                text = ((email.get("subject") or "") + " " + (email.get("snippet") or "")).lower()
+                if any(w in text for w in _urgent):
+                    cat = "urgent"
+                elif any(w in text for w in _reply):
+                    cat = "reply_needed"
+                elif any(w in text for w in _fyi):
+                    cat = "fyi"
+                else:
+                    cat = "clean"
+                result.append({
+                    "id": email.get("id", ""),
+                    "from": email.get("from", ""),
+                    "subject": email.get("subject", ""),
+                    "snippet": email.get("snippet", ""),
+                    "category": cat,
+                    "tag": cat,
+                    "score": _scores[cat],
+                })
+
+            counts = {
+                "urgent": sum(1 for e in result if e["category"] == "urgent"),
+                "reply_needed": sum(1 for e in result if e["category"] == "reply_needed"),
+                "fyi": sum(1 for e in result if e["category"] == "fyi"),
+                "clean": sum(1 for e in result if e["category"] == "clean"),
+            }
+            return jsonify({
+                "emails": result,
+                "emails_unread": unread_count,
+                "counts": counts,
+                "total": len(result),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            logger.exception(f"Digest full error: {e}")
+            return jsonify({"emails": [], "error": str(e)}), 500
+
     # ====== SCHEDULE STUB ======
 
     @app.route("/api/schedule/update", methods=["POST"])
