@@ -93,7 +93,19 @@ def create_app() -> Flask:
     register_dashboard_routes(app)
     from app.api.briefing_routes import register_briefing_routes
     register_briefing_routes(app)
+    from app.api.voice_routes import register_voice_routes
+    register_voice_routes(app)
     register_chat_routes(app)
+
+    # ====== KOKORO TTS DAEMON ======
+    # Starts loading the model asynchronously — Flask is already up and serving
+    # by the time the 10-15s model load completes. First TTS request before
+    # the daemon is ready falls back to OpenAI TTS or macOS say.
+    try:
+        from app.voice.kokoro_daemon import get_daemon
+        get_daemon().start()
+    except Exception as _voice_exc:
+        logger.warning("Kokoro daemon start failed (non-fatal): %s", _voice_exc)
 
     # ====== STARTUP LOG ======
     logger.info("=" * 60)

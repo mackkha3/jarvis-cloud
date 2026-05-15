@@ -202,29 +202,7 @@ def register_dashboard_routes(app: Flask) -> None:
                 "error": str(e),
             })
 
-    # ====== VOICE STUBS ======
-    # Full implementation coming when voice layer is built.
-    # Returns safe defaults so dashboard doesn't crash.
-
-    @app.route("/api/voice/status", methods=["GET"])
-    @require_api_key
-    def voice_status():
-        """Voice layer status — stub until voice module is built."""
-        return jsonify({
-            "status": "offline",
-            "message": "Voice layer coming in next build",
-            "wake_word": "hey_jarvis",
-            "tts": "kokoro",
-        })
-
-    @app.route("/api/voice/activate", methods=["POST"])
-    @require_api_key
-    def voice_activate():
-        """Voice activation — stub until voice module is built."""
-        return jsonify({
-            "activated": False,
-            "message": "Voice layer coming in next build",
-        })
+    # Voice routes moved to app/api/voice_routes.py (register_voice_routes)
 
     # ====== MEMORY STUB ======
 
