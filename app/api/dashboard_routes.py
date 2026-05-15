@@ -265,8 +265,11 @@ def register_dashboard_routes(app: Flask) -> None:
                 from app.briefings.morning import generate_morning_briefing
                 result = generate_morning_briefing()
                 return jsonify({"job": job, "result": result, "triggered": True})
+            elif job == "evening-brief":
+                from app.briefings.evening import generate_evening_debrief
+                result = generate_evening_debrief()
+                return jsonify({"job": job, "result": result, "triggered": True})
             else:
-                # Stubs for evening-brief and triage
                 return jsonify({
                     "job": job,
                     "triggered": True,
@@ -296,24 +299,27 @@ def register_dashboard_routes(app: Flask) -> None:
 
     @app.route("/evening-debrief.html", methods=["GET"])
     def evening_debrief_page():
-        """Evening debrief page — stub until evening briefing is built."""
-        from flask import Response
-        html = """<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<title>J.A.R.V.I.S // EVENING DEBRIEF</title>
-<style>
-body{background:#050811;color:#00d4ff;font-family:monospace;
-display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
-.msg{text-align:center;border:1px solid rgba(0,212,255,0.3);padding:3rem;border-radius:4px;}
-h1{font-size:1.5rem;margin-bottom:1rem;letter-spacing:.2em;}
-p{color:#6c8090;font-size:.85rem;}
-</style></head>
-<body><div class="msg">
-<h1>J.A.R.V.I.S</h1>
-<p>EVENING DEBRIEF // COMING IN NEXT BUILD</p>
-<p style="margin-top:1rem;color:#00d4ff;">Check back after 23:30</p>
-</div></body></html>"""
-        return Response(html, mimetype="text/html")
+        """Full evening debrief page — amber accent, day recap + tomorrow preview."""
+        try:
+            from app.briefings.evening_html import generate_evening_debrief_html
+            from flask import Response
+            html = generate_evening_debrief_html()
+            return Response(html, mimetype="text/html")
+        except Exception as e:
+            logger.exception(f"Evening debrief page error: {e}")
+            return f"<h1>Error generating debrief: {e}</h1>", 500
+
+    @app.route("/api/briefings/evening", methods=["GET"])
+    @require_api_key
+    def evening_briefing():
+        """Evening debrief JSON endpoint — for dashboard panel."""
+        try:
+            from app.briefings.evening import generate_evening_debrief
+            result = generate_evening_debrief()
+            return jsonify(result)
+        except Exception as e:
+            logger.exception(f"Evening briefing endpoint error: {e}")
+            return jsonify({"error": str(e)}), 500
 
     # ====== SCHEDULE STUB ======
 
