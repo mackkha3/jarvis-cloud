@@ -89,6 +89,8 @@ def create_app() -> Flask:
         }), 500
 
     # ====== REGISTER ADDITIONAL ROUTES ======
+    from app.api.briefing_routes import register_briefing_routes
+    register_briefing_routes(app)
     register_chat_routes(app)
 
     # ====== STARTUP LOG ======
