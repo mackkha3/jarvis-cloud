@@ -4,6 +4,16 @@
 <meta charset="utf-8" />
 <title>J.A.R.V.I.S — Command Center</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<!-- PWA -->
+<link rel="manifest" href="/pwa/manifest.json" />
+<meta name="theme-color" content="#00d4ff" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="JARVIS" />
+<link rel="apple-touch-icon" href="/pwa/icons/icon-192.png" />
+<link rel="apple-touch-icon" sizes="192x192" href="/pwa/icons/icon-192.png" />
+<link rel="apple-touch-icon" sizes="512x512" href="/pwa/icons/icon-512.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -2240,6 +2250,14 @@ async function loadAll() {
     loadBrief(), loadEvents(), loadSystemStatus(),
     loadChart(), loadLog(),    loadTriage(), loadTasks(), loadVoice(),
   ]);
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/pwa/sw.js', { scope: '/' })
+      .catch(err => console.warn('SW registration failed:', err));
+  });
 }
 </script>
 </body>

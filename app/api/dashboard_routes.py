@@ -23,6 +23,7 @@ def register_dashboard_routes(app: Flask) -> None:
 
     cfg = get_config()
     pwa_dir = Path(cfg.project_root) / "pwa" / "public"
+    icons_dir = Path(cfg.project_root) / "pwa" / "icons"
 
     # ====== SERVE THE DASHBOARD ======
 
@@ -31,6 +32,24 @@ def register_dashboard_routes(app: Flask) -> None:
     def dashboard():
         """Serve the Iron Man HUD dashboard."""
         return send_from_directory(str(pwa_dir), "index.html")
+
+    @app.route("/pwa/manifest.json")
+    def pwa_manifest():
+        """Web App Manifest for PWA installability."""
+        return send_from_directory(str(pwa_dir), "manifest.json")
+
+    @app.route("/pwa/sw.js")
+    def pwa_sw():
+        """Service worker — must be served from /pwa/ scope root."""
+        resp = send_from_directory(str(pwa_dir), "sw.js")
+        resp.headers["Service-Worker-Allowed"] = "/"
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+    @app.route("/pwa/icons/<filename>")
+    def pwa_icons(filename: str):
+        """PWA icon assets."""
+        return send_from_directory(str(icons_dir), filename)
 
     # ====== CALENDAR ======
 
