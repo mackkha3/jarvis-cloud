@@ -1,0 +1,40 @@
+{
+  "name": "J.A.R.V.I.S Command Center",
+  "short_name": "JARVIS",
+  "description": "Personal AI assistant — Iron Man HUD",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#05050f",
+  "theme_color": "#00d4ff",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/pwa/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Morning Brief",
+      "short_name": "Morning",
+      "url": "/morning-brief.html",
+      "description": "Today's morning briefing"
+    },
+    {
+      "name": "Evening Debrief",
+      "short_name": "Evening",
+      "url": "/evening-debrief.html",
+      "description": "Evening day recap"
+    }
+  ]
+}
