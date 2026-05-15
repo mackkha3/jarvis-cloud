@@ -56,3 +56,6 @@ node_modules/
 conversation.json
 memory_store/
 token_usage.json
+
+# Setup script state — contains API keys, never commit
+.railway-setup-state
