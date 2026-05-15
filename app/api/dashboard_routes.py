@@ -94,8 +94,15 @@ def register_dashboard_routes(app: Flask) -> None:
     @require_api_key
     def digest():
         """
-        Quick digest — unread email count + today's event count + task count.
-        Used by the dashboard header for at-a-glance status.
+        Digest endpoint — powers the dashboard triage panel, chart, and header.
+
+        Returns:
+          emails: list of email objects with category tags for triage display
+          events_today: count of today's calendar events
+          tasks_pending: count of pending tasks
+          tasks_completed: count completed today (stub — 0 until task tracking built)
+          emails_unread: raw unread count
+          timestamp: ISO timestamp
         """
         try:
             from app.integrations.google import GoogleCalendar, GoogleTasks, GoogleGmail
@@ -104,22 +111,75 @@ def register_dashboard_routes(app: Flask) -> None:
             tasks_client = GoogleTasks()
             gmail = GoogleGmail()
 
+            # Calendar
             events_today = len(cal.get_todays_events()) if cal.available else 0
+
+            # Tasks
             tasks_count = len(tasks_client.get_tasks()) if tasks_client.available else 0
-            unread = gmail.get_unread_count() if gmail.available else 0
+
+            # Gmail — fetch recent emails and categorize them
+            unread_count = 0
+            categorized_emails = []
+
+            if gmail.available:
+                unread_count = gmail.get_unread_count()
+                recent = gmail.get_recent_emails(max_results=20)
+
+                for email in recent:
+                    subject = (email.get("subject") or "").lower()
+                    snippet = (email.get("snippet") or "").lower()
+                    sender  = (email.get("from") or "").lower()
+                    text    = subject + " " + snippet
+
+                    # Simple heuristic categorization
+                    # In a future build this will use Claude triage
+                    if any(w in text for w in [
+                        "urgent", "asap", "immediately", "critical",
+                        "important", "deadline", "overdue", "action required"
+                    ]):
+                        category = "urgent"
+                    elif any(w in text for w in [
+                        "reply", "response", "please respond", "let me know",
+                        "following up", "follow up", "can you", "could you",
+                        "waiting", "awaiting"
+                    ]):
+                        category = "reply_needed"
+                    elif any(w in text for w in [
+                        "fyi", "for your information", "heads up", "update",
+                        "newsletter", "notification", "alert", "reminder"
+                    ]):
+                        category = "fyi"
+                    else:
+                        category = "clean"
+
+                    categorized_emails.append({
+                        "id": email.get("id", ""),
+                        "from": email.get("from", ""),
+                        "subject": email.get("subject", ""),
+                        "snippet": email.get("snippet", ""),
+                        "category": category,
+                        "tag": category,
+                    })
 
             return jsonify({
+                "emails": categorized_emails,
+                "emails_unread": unread_count,
                 "events_today": events_today,
                 "tasks_pending": tasks_count,
-                "emails_unread": unread,
+                "tasks_completed": 0,
+                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             })
+
         except Exception as e:
             logger.exception(f"Digest error: {e}")
             return jsonify({
+                "emails": [],
+                "emails_unread": 0,
                 "events_today": 0,
                 "tasks_pending": 0,
-                "emails_unread": 0,
+                "tasks_completed": 0,
+                "timestamp": "—",
                 "error": str(e),
             })
 
@@ -215,6 +275,45 @@ def register_dashboard_routes(app: Flask) -> None:
         except Exception as e:
             logger.exception(f"Job run error: {e}")
             return jsonify({"error": str(e), "job": job}), 500
+
+    # ====== FULL BRIEFING PAGES ======
+
+    @app.route("/morning-brief.html", methods=["GET"])
+    def morning_brief_page():
+        """
+        Full morning briefing page — linked from dashboard VIEW FULL BRIEFING.
+        Generates fresh HTML with live data on every request.
+        No auth required — served as a standalone page.
+        """
+        try:
+            from app.briefings.morning_html import generate_morning_brief_html
+            html = generate_morning_brief_html()
+            from flask import Response
+            return Response(html, mimetype="text/html")
+        except Exception as e:
+            logger.exception(f"Morning brief page error: {e}")
+            return f"<h1>Error generating briefing: {e}</h1>", 500
+
+    @app.route("/evening-debrief.html", methods=["GET"])
+    def evening_debrief_page():
+        """Evening debrief page — stub until evening briefing is built."""
+        from flask import Response
+        html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>J.A.R.V.I.S // EVENING DEBRIEF</title>
+<style>
+body{background:#050811;color:#00d4ff;font-family:monospace;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.msg{text-align:center;border:1px solid rgba(0,212,255,0.3);padding:3rem;border-radius:4px;}
+h1{font-size:1.5rem;margin-bottom:1rem;letter-spacing:.2em;}
+p{color:#6c8090;font-size:.85rem;}
+</style></head>
+<body><div class="msg">
+<h1>J.A.R.V.I.S</h1>
+<p>EVENING DEBRIEF // COMING IN NEXT BUILD</p>
+<p style="margin-top:1rem;color:#00d4ff;">Check back after 23:30</p>
+</div></body></html>"""
+        return Response(html, mimetype="text/html")
 
     # ====== SCHEDULE STUB ======
 

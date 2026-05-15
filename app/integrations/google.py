@@ -178,7 +178,7 @@ class GoogleCalendar:
 
             formatted.append({
                 "id": event.get("id", ""),
-                "title": event.get("summary", "Untitled"),
+                "summary": event.get("summary", "Untitled"),
                 "start": start.get("dateTime", start.get("date", "")),
                 "end": end.get("dateTime", end.get("date", "")),
                 "location": event.get("location", ""),
