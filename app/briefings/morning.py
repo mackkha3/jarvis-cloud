@@ -197,7 +197,7 @@ Do NOT start with 'Good morning' if it's after noon."""
     )
 
     return {
-        "briefing": briefing_text,
+        "briefing_text": briefing_text,
         "stats": stats,
         "generated_at": now.isoformat(),
         "tokens": result.get("tokens", {}),
