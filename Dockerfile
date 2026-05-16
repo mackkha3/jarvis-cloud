@@ -26,4 +26,4 @@ EXPOSE 8080
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-CMD ["/entrypoint.sh"]
+CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "--log-level", "info"]
