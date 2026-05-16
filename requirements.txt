@@ -34,3 +34,15 @@ structlog==24.4.0
 
 # --- Security ---
 cryptography==43.0.1
+
+# --- Voice / TTS (Kokoro daemon) ---
+# PINNED: These exact versions work together on Intel Mac + Python 3.11
+# Do NOT upgrade without testing — torch/numpy/transformers version conflicts are real
+torch==2.2.2
+numpy==1.26.4
+kokoro==0.9.4
+transformers==4.40.0
+tokenizers==0.19.1
+huggingface_hub==0.36.2
+soundfile==0.13.1
+sounddevice==0.5.5
