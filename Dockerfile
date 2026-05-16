@@ -23,11 +23,4 @@ RUN mkdir -p logs pwa/icons
 # Railway injects PORT at runtime; default to 8080 for local Docker runs
 EXPOSE 8080
 
-# Shell form so ${PORT:-8080} expands correctly at container start
-CMD gunicorn run:app \
-    --bind "0.0.0.0:${PORT:-8080}" \
-    --workers 2 \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info
+CMD gunicorn run:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120 --log-level info
