@@ -19,11 +19,16 @@ Segfault note (vs old subprocess approach):
 - KMP_DUPLICATE_LIB_OK and PYTORCH_ENABLE_MPS_FALLBACK are still set defensively.
 """
 
+# These must be the very first lines after the docstring — before any import
+# that could transitively pull in torch or libiomp. Matches old kokoro_tts.py exactly.
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+
 import base64
 import io
 import json
 import logging
-import os
 import socket
 import struct
 import threading
@@ -31,10 +36,6 @@ import time
 from collections import deque
 from datetime import datetime
 from typing import Optional
-
-# Must be set before any torch/kokoro import anywhere in the process
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 logger = logging.getLogger("jarvis.voice.kokoro")
 
@@ -122,12 +123,11 @@ class KokoroDaemon:
     def _load_model(self) -> bool:
         try:
             import warnings
+            logger.info("Loading Kokoro-82M (first run downloads ~82MB from HuggingFace)...")
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=UserWarning)
                 from kokoro import KPipeline
-
-            logger.info("Loading Kokoro-82M (first run downloads ~82MB from HuggingFace)...")
-            self._pipe = KPipeline(lang_code="b", repo_id="hexgrad/Kokoro-82M")
+                self._pipe = KPipeline(lang_code='b', repo_id='hexgrad/Kokoro-82M')
             logger.info("Kokoro model loaded")
             return True
 
@@ -169,7 +169,7 @@ class KokoroDaemon:
             # Kokoro yields (graphemes, phonemes, audio_tensor)
             chunks.append(result[2].numpy())
 
-        audio = np.concatenate(chunks) if chunks else np.zeros(100, dtype=np.float32)
+        audio = np.concatenate(chunks) if chunks else np.array([], dtype=np.float32)
 
         buf = io.BytesIO()
         sf.write(buf, audio, _SAMPLE_RATE, format="WAV")
