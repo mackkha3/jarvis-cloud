@@ -23,4 +23,7 @@ RUN mkdir -p logs pwa/icons
 # Railway injects PORT at runtime; default to 8080 for local Docker runs
 EXPOSE 8080
 
-CMD gunicorn run:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120 --log-level info
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+CMD ["/entrypoint.sh"]
