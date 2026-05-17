@@ -918,6 +918,13 @@
   }
   .reactor--active{animation:reactor-breathe 2s ease-in-out infinite;cursor:pointer}
 
+  /* LISTENING — container pulses brighter while mic is open */
+  @keyframes reactor-listening{
+    0%,100%{filter:drop-shadow(0 0 12px rgba(0,212,255,0.5))}
+    50%{filter:drop-shadow(0 0 25px rgba(0,212,255,0.9))}
+  }
+  .reactor--listening{animation:reactor-listening 1s ease-in-out infinite;cursor:pointer}
+
   /* r-core-amber: amber overlay visible only in PROCESSING */
   .r-core-amber{opacity:0;transition:opacity .5s}
 
@@ -2311,232 +2318,265 @@ async function loadAll() {
   ]);
 }
 
-// ====== JARVIS VOICE CONVERSATION ======
+// ====== JARVIS VOICE CONVERSATION — CONTINUOUS MODE ======
 const JARVIS_SESSION_ID = (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
 let jarvisRecognition = null;
-let jarvisListening = false;
 let jarvisSessionActive = false;
 let jarvisProcessing = false;
+let jarvisListening = false;
 let _lastTap = 0;
-
-// ── TTS mode ──────────────────────────────────────────────────────
 let JARVIS_TTS_MODE = 'browser';
 const TTS_MODE_LABELS = {
   browser: '🔊 BROWSER VOICE',
   openai:  '⚡ OPENAI VOICE',
-  kokoro:  '🤖 KOKORO VOICE',
+  kokoro:  '🤖 KOKORO VOICE'
 };
 
-async function loadTTSMode() {
-  // Prefer stored user preference; fall back to server config default
+function loadTTSMode() {
   const saved = localStorage.getItem('jarvis_tts_mode');
-  if (saved && TTS_MODE_LABELS[saved]) {
-    JARVIS_TTS_MODE = saved;
-  } else {
-    try {
-      const resp = await jfetch('/voice/tts-mode');
-      if (resp && resp.mode) JARVIS_TTS_MODE = resp.mode;
-    } catch(e) {}
-  }
+  if (saved) JARVIS_TTS_MODE = saved;
   const el = document.getElementById('tts-mode-indicator');
   if (el) el.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE] || TTS_MODE_LABELS.browser;
 }
 
 function cycleTTSMode() {
   const modes = ['browser', 'openai', 'kokoro'];
-  JARVIS_TTS_MODE = modes[(modes.indexOf(JARVIS_TTS_MODE) + 1) % modes.length];
+  const idx = modes.indexOf(JARVIS_TTS_MODE);
+  JARVIS_TTS_MODE = modes[(idx + 1) % modes.length];
   const el = document.getElementById('tts-mode-indicator');
   if (el) el.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE];
   localStorage.setItem('jarvis_tts_mode', JARVIS_TTS_MODE);
   showToast('Voice: ' + JARVIS_TTS_MODE);
 }
 
+// ── TAP HANDLER ──────────────────────────────────────────
 async function toggleListening() {
-  const _now = Date.now();
-  if (_now - _lastTap < 2000) return;
-  _lastTap = _now;
-  // Instant beep + AudioContext unlock on every tap (user gesture required)
+  const now = Date.now();
+  if (now - _lastTap < 2000) return;
+  _lastTap = now;
+
+  // Instant beep feedback
   try {
-    window._audioCtx = window._audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (window._audioCtx.state === 'suspended') window._audioCtx.resume();
-    const o = window._audioCtx.createOscillator();
-    const g = window._audioCtx.createGain();
-    o.connect(g); g.connect(window._audioCtx.destination);
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
     o.frequency.value = 880;
-    g.gain.setValueAtTime(0.1, window._audioCtx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, window._audioCtx.currentTime + 0.15);
-    o.start(window._audioCtx.currentTime); o.stop(window._audioCtx.currentTime + 0.15);
+    g.gain.setValueAtTime(0.1, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    o.start(); o.stop(ctx.currentTime + 0.15);
   } catch(e) {}
 
-  if (jarvisListening) {
-    if (jarvisRecognition) jarvisRecognition.stop();
+  if (jarvisSessionActive) {
+    // Second tap while active = end session
+    endSession();
     return;
   }
-  if (!jarvisSessionActive) {
-    await startJarvisSession();
-  } else {
-    startListening();
-  }
+
+  // First tap — start session
+  await startJarvisSession();
 }
 
+// ── SESSION START ─────────────────────────────────────────
 async function startJarvisSession() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Voice not supported. Use Chrome or Safari.');
+    return;
+  }
+
+  // Start continuous recognition FIRST (inside user gesture context)
+  jarvisRecognition = new SpeechRecognition();
+  jarvisRecognition.continuous = true;
+  jarvisRecognition.interimResults = false;
+  jarvisRecognition.lang = 'en-US';
+  jarvisRecognition.maxAlternatives = 1;
+
+  jarvisRecognition.onresult = async (event) => {
+    if (jarvisProcessing) return; // ignore results while processing
+    const text = event.results[event.results.length - 1][0].transcript.trim();
+    if (!text) return;
+    await sendToJarvis(text);
+  };
+
+  jarvisRecognition.onerror = (e) => {
+    if (e.error === 'no-speech') return; // ignore silence
+    if (e.error === 'aborted') return;   // we aborted it intentionally
+    showToast('Mic error: ' + e.error);
+    resetVoiceState();
+  };
+
+  jarvisRecognition.onend = () => {
+    // Continuous recognition stopped unexpectedly — restart if session still active
+    if (jarvisSessionActive && !jarvisProcessing) {
+      try { jarvisRecognition.start(); } catch(e) {}
+    }
+  };
+
+  jarvisSessionActive = true;
+  jarvisListening = true;
+  setVoiceState('listening');
+
+  // Start recognition
+  try {
+    jarvisRecognition.start();
+  } catch(e) {
+    showToast('Could not start mic: ' + e.message);
+    resetVoiceState();
+    return;
+  }
+
+  // Get greeting from server
   setVoiceState('processing');
   try {
     const resp = await jfetch('/voice/chat', {
       method: 'POST',
       body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID })
     });
-    jarvisSessionActive = true;
     appendVoiceLog('JARVIS', resp.response);
-    await playAudioThen(resp.audio_url, resp.response, () => setVoiceState('active'));
+    await playAudioThen(resp.audio_url, resp.response, () => {
+      // After greeting, go back to listening state
+      jarvisListening = true;
+      setVoiceState('listening');
+    });
   } catch(e) {
     resetVoiceState();
-    showToast('JARVIS unavailable');
   }
 }
 
-function startListening() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    showToast("Voice not supported. Use Chrome or Safari.");
-    return;
-  }
-  jarvisRecognition = new SpeechRecognition();
-  jarvisRecognition.continuous = false;
-  jarvisRecognition.interimResults = false;
-  jarvisRecognition.lang = 'en-US';
-  jarvisRecognition.maxAlternatives = 1;
-  jarvisRecognition.onstart = () => { jarvisListening = true; setVoiceState('listening'); };
-  jarvisRecognition.onresult = async (event) => {
-    const text = event.results[0][0].transcript;
-    jarvisListening = false;
-    jarvisRecognition = null;
-    await sendToJarvis(text);
-  };
-  jarvisRecognition.onerror = (e) => {
-    if (e.error !== 'no-speech') showToast('Voice error: ' + e.error);
-    resetVoiceState();
-  };
-  jarvisRecognition.onend = () => {
-    jarvisListening = false;
-    // No auto-restart — Chrome blocks SpeechRecognition outside a user gesture
-    if (jarvisSessionActive && !jarvisProcessing) setVoiceState('active');
-  };
-  jarvisRecognition.start();
-}
-
+// ── SEND TO JARVIS ────────────────────────────────────────
 async function sendToJarvis(text) {
   jarvisProcessing = true;
+  jarvisListening = false;
   setVoiceState('processing');
   appendVoiceLog('YOU', text);
-  // Immediate "..." placeholder — makes 3-4s wait feel shorter
+
+  // Show thinking indicator
   const thinkId = 'think-' + Date.now();
   appendVoiceLog('JARVIS', '...', thinkId);
+
   try {
     const resp = await jfetch('/voice/chat', {
       method: 'POST',
-      body: JSON.stringify({ text: text, session_id: JARVIS_SESSION_ID })
+      body: JSON.stringify({ text, session_id: JARVIS_SESSION_ID })
     });
+
     const thinkEl = document.getElementById(thinkId);
     if (thinkEl) thinkEl.remove();
+
     if (!resp || resp.error) {
-      resetVoiceState();
-      return;
-    }
-    appendVoiceLog('JARVIS', resp.response);
-    if (resp.session_active === false) {
-      jarvisSessionActive = false;
       jarvisProcessing = false;
-      await playAudioThen(resp.audio_url, resp.response, () => setVoiceState('idle'));
+      jarvisListening = true;
+      setVoiceState('listening');
       return;
     }
+
+    appendVoiceLog('JARVIS', resp.response);
+
+    // Check for dismissal
+    if (resp.session_active === false) {
+      await playAudioThen(resp.audio_url, resp.response, () => {
+        endSession();
+      });
+      return;
+    }
+
+    // Play response then resume listening
     await playAudioThen(resp.audio_url, resp.response, () => {
       jarvisProcessing = false;
-      if (jarvisSessionActive) setVoiceState('active');
+      jarvisListening = true;
+      setVoiceState('listening');
+      // Resume continuous recognition if it stopped
+      if (jarvisSessionActive && jarvisRecognition) {
+        try { jarvisRecognition.start(); } catch(e) {}
+      }
     });
+
   } catch(e) {
     const thinkEl = document.getElementById(thinkId);
     if (thinkEl) thinkEl.remove();
-    resetVoiceState();
+    jarvisProcessing = false;
+    jarvisListening = true;
+    setVoiceState('listening');
     showToast('JARVIS unavailable');
   }
 }
 
+// ── END SESSION ───────────────────────────────────────────
+function endSession() {
+  jarvisSessionActive = false;
+  jarvisProcessing = false;
+  jarvisListening = false;
+  if (jarvisRecognition) {
+    try { jarvisRecognition.stop(); } catch(e) {}
+    jarvisRecognition = null;
+  }
+  setVoiceState('idle');
+}
+
+// ── RESET (error recovery) ────────────────────────────────
+function resetVoiceState() {
+  if (!jarvisSessionActive) {
+    endSession();
+    return;
+  }
+  jarvisProcessing = false;
+  jarvisListening = true;
+  setVoiceState('listening');
+}
+
+// ── AUDIO PLAYBACK ────────────────────────────────────────
 async function playAudioThen(audioUrl, fallbackText, onComplete) {
   setVoiceState('speaking');
+  const finish = () => { if (onComplete) onComplete(); };
 
-  const finish = () => {
-    if (onComplete) onComplete();
-  };
-
-  // Browser mode OR no audio — use browser TTS
   if (JARVIS_TTS_MODE === 'browser' || !audioUrl) {
     browserTTSThen(fallbackText, finish);
     return;
   }
 
-  // Try server audio
   try {
     const audio = new Audio(window.location.origin + audioUrl);
     let completed = false;
     const safeFinish = () => { if (!completed) { completed = true; finish(); } };
-
     audio.onended = safeFinish;
     audio.onerror = () => { browserTTSThen(fallbackText, safeFinish); };
-
-    // Timeout safety — if audio hasn't finished in 30s, force complete
     setTimeout(() => safeFinish(), 30000);
-
-    await audio.play().catch(() => { browserTTSThen(fallbackText, safeFinish); });
+    await audio.play().catch(() => browserTTSThen(fallbackText, safeFinish));
   } catch(e) {
     browserTTSThen(fallbackText, finish);
   }
 }
 
 function browserTTSThen(text, onComplete) {
-  const finish = () => { setVoiceState('active'); if (onComplete) onComplete(); };
-
+  const finish = () => { if (onComplete) onComplete(); };
   if (!window.speechSynthesis) { finish(); return; }
-
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 0.88; u.pitch = 0.75; u.volume = 1.0;
-
   const voices = window.speechSynthesis.getVoices();
   const british = voices.find(v => v.lang === 'en-GB') ||
                   voices.find(v => v.name.toLowerCase().includes('daniel'));
   if (british) u.voice = british;
-
   u.onend = finish;
   u.onerror = finish;
-
-  // Safety timeout — browser TTS sometimes hangs
   setTimeout(finish, (text.split(' ').length * 600) + 2000);
-
   window.speechSynthesis.speak(u);
 }
 
-function resetVoiceState() {
-  jarvisListening = false;
-  jarvisProcessing = false;
-  if (jarvisRecognition) {
-    try { jarvisRecognition.stop(); } catch(e) {}
-    jarvisRecognition = null;
-  }
-  setVoiceState(jarvisSessionActive ? 'active' : 'idle');
-}
-
+// ── VOICE STATE DISPLAY ───────────────────────────────────
 function setVoiceState(state) {
   const orb  = document.getElementById('voice-orb');
   const lbl  = orb ? orb.querySelector('.voice-status-label') : null;
-  const wrap = orb ? orb.querySelector('.reactor-svg-wrap')   : null;
+  const wrap = orb ? orb.querySelector('.reactor-svg-wrap') : null;
+
   const m = {
     idle:       { cls:'reactor--standby',    text:'TAP TO START',                  lbl:'',           glow:'0 0 20px rgba(0,212,255,0.3)' },
-    active:     { cls:'reactor--active',     text:'SESSION ACTIVE — TAP TO SPEAK', lbl:'lbl-active', glow:'' },
-    listening:  { cls:'reactor--listening',  text:'LISTENING...',                  lbl:'lbl-active', glow:'0 0 30px rgba(0,212,255,0.7)' },
+    listening:  { cls:'reactor--listening',  text:'LISTENING...',                  lbl:'lbl-active', glow:'' },
     processing: { cls:'reactor--processing', text:'PROCESSING...',                 lbl:'lbl-amber',  glow:'0 0 30px rgba(255,184,77,0.6)' },
-    speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',               lbl:'lbl-active', glow:'0 0 38px rgba(0,212,255,0.8)' },
+    speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',               lbl:'lbl-active', glow:'' },
+    active:     { cls:'reactor--active',     text:'SESSION ACTIVE — TAP TO END',   lbl:'lbl-active', glow:'' },
   };
+
   const s = m[state] || m.idle;
   if (orb)  orb.className = 'jarvis-reactor ' + s.cls;
   if (lbl)  { lbl.textContent = s.text; lbl.className = 'voice-status-label ' + s.lbl; }
@@ -2547,14 +2587,13 @@ function appendVoiceLog(speaker, text, id) {
   const log = document.getElementById('log');
   if (!log) return;
   const ts = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  log.querySelectorAll('.cursor').forEach(c => c.remove());
+  const isUser = speaker === 'YOU';
   const line = document.createElement('span');
   line.className = 'line';
   if (id) line.id = id;
-  const isUser = speaker === 'YOU';
   line.innerHTML = '<span class="ts">' + ts + '</span>' +
     '<span class="' + (isUser?'you':'pfx') + '">' + speaker + '&gt;</span>' +
-    '<span class="' + (isUser?'you':'out') + (id?'" style="opacity:.45':'"') + '">' + esc(text) + '</span>';
+    '<span class="' + (isUser?'you':'out') + '">' + (typeof esc === 'function' ? esc(text) : text) + '</span>';
   log.appendChild(line);
   while (log.querySelectorAll('.line').length > 8) log.removeChild(log.querySelector('.line'));
   log.scrollTop = log.scrollHeight;
