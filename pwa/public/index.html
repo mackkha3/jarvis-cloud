@@ -911,6 +911,13 @@
   .reactor--offline .r-outer-g,.reactor--offline .r-mid-g,.reactor--offline .r-core-g{opacity:.2}
   .reactor--offline .reactor-svg-wrap{filter:none}
 
+  /* ACTIVE — session open, waiting for next tap; breathes in cyan */
+  @keyframes reactor-breathe{
+    0%,100%{filter:drop-shadow(0 0 8px rgba(0,212,255,0.3))}
+    50%{filter:drop-shadow(0 0 20px rgba(0,212,255,0.7))}
+  }
+  .reactor--active{animation:reactor-breathe 2s ease-in-out infinite;cursor:pointer}
+
   /* r-core-amber: amber overlay visible only in PROCESSING */
   .r-core-amber{opacity:0;transition:opacity .5s}
 
@@ -1661,9 +1668,9 @@ function startDashboard() {
 // ── Voice state poller — updates reactor class every 2s without rebuilding panel ─
 function pollVoiceState() {
   if (!JARVIS_KEY) return;
-  if (jarvisListening || jarvisRecognition) return;
+  if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;
   jfetch("/voice/status").then(function(d) {
-    if (jarvisListening || jarvisRecognition) return;
+    if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;
     var running = d.running || d.online || false;
     var state   = (d.state || "offline").toLowerCase();
     var info    = _voiceStateInfo(state, running);
@@ -1675,12 +1682,12 @@ function pollVoiceState() {
     var meta = document.getElementById("voice-meta");
     if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "READY");
   }).catch(function() {
-    if (jarvisListening || jarvisRecognition) return;
+    if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;
     var orb = document.getElementById("voice-orb");
     if (!orb) return;
     orb.className = "jarvis-reactor reactor--standby";
     var lbl = orb.querySelector(".voice-status-label");
-    if (lbl) { lbl.textContent = "ONLINE — TAP TO SPEAK"; lbl.className = "voice-status-label"; }
+    if (lbl) { lbl.textContent = "TAP TO START"; lbl.className = "voice-status-label"; }
   });
 }
 
@@ -2124,7 +2131,7 @@ function _voiceStateInfo(state, running) {
 
 // ── Panel: Voice Interface — animated orb ─────────────────────────
 async function loadVoice() {
-  if (jarvisListening || jarvisRecognition) return;
+  if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;
   var body = document.getElementById("voice-body");
   var meta = document.getElementById("voice-meta");
   if (!body) return;
@@ -2185,7 +2192,7 @@ async function loadVoice() {
 
   panelLoaded(body, html);
   setVoiceState('idle');
-  if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "OFFLINE");
+  if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "READY");
 }
 
 function loadVoicePanel() { loadVoice(); }
@@ -2524,16 +2531,16 @@ function setVoiceState(state) {
   const lbl  = orb ? orb.querySelector('.voice-status-label') : null;
   const wrap = orb ? orb.querySelector('.reactor-svg-wrap')   : null;
   const m = {
-    idle:       { cls:'reactor--standby',    text:'ONLINE — TAP TO SPEAK', lbl:'',           glow:'0 0 20px rgba(0,212,255,0.3)' },
-    active:     { cls:'reactor--standby',    text:'TAP TO SPEAK',           lbl:'lbl-active', glow:'0 0 15px rgba(0,212,255,0.4)' },
-    listening:  { cls:'reactor--listening',  text:'LISTENING...',           lbl:'lbl-active', glow:'0 0 30px rgba(0,212,255,0.7)' },
-    processing: { cls:'reactor--processing', text:'PROCESSING...',          lbl:'lbl-amber',  glow:'0 0 30px rgba(255,184,77,0.6)' },
-    speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',        lbl:'lbl-active', glow:'0 0 38px rgba(0,212,255,0.8)' },
+    idle:       { cls:'reactor--standby',    text:'TAP TO START',                  lbl:'',           glow:'0 0 20px rgba(0,212,255,0.3)' },
+    active:     { cls:'reactor--active',     text:'SESSION ACTIVE — TAP TO SPEAK', lbl:'lbl-active', glow:'' },
+    listening:  { cls:'reactor--listening',  text:'LISTENING...',                  lbl:'lbl-active', glow:'0 0 30px rgba(0,212,255,0.7)' },
+    processing: { cls:'reactor--processing', text:'PROCESSING...',                 lbl:'lbl-amber',  glow:'0 0 30px rgba(255,184,77,0.6)' },
+    speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',               lbl:'lbl-active', glow:'0 0 38px rgba(0,212,255,0.8)' },
   };
   const s = m[state] || m.idle;
   if (orb)  orb.className = 'jarvis-reactor ' + s.cls;
   if (lbl)  { lbl.textContent = s.text; lbl.className = 'voice-status-label ' + s.lbl; }
-  if (wrap) wrap.style.filter = 'drop-shadow(' + s.glow + ')';
+  if (wrap) wrap.style.filter = s.glow ? 'drop-shadow(' + s.glow + ')' : '';
 }
 
 function appendVoiceLog(speaker, text, id) {
