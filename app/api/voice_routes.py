@@ -248,6 +248,14 @@ def register_voice_routes(app: Flask) -> None:
             logger.exception("Voice activate error: %s", exc)
             return jsonify({"activated": False, "error": str(exc)}), 500
 
+    @app.route("/api/voice/tts-mode", methods=["GET"])
+    @require_api_key
+    def get_tts_mode():
+        """Return current server TTS mode so frontend knows whether to use browser TTS."""
+        from app.config import get_config
+        cfg = get_config()
+        return jsonify({"mode": cfg.tts_mode})
+
 
 def register_voice_chat_routes(app: Flask) -> None:
     """Register closed-loop conversation and audio-serving routes."""
