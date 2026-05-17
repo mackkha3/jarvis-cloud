@@ -2138,6 +2138,8 @@ function _voiceStateInfo(state, running) {
 
 // ── Panel: Voice Interface — animated orb ─────────────────────────
 async function loadVoice() {
+  // Don't rebuild panel if session just ended (within 3 seconds)
+  if (jarvisSessionActive || jarvisListening || jarvisProcessing) return;
   if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;
   var body = document.getElementById("voice-body");
   var meta = document.getElementById("voice-meta");
@@ -2467,14 +2469,27 @@ async function startJarvisSession() {
     await playAudioThen(resp.audio_url, resp.response, () => {
       jarvisListening = true;
       setVoiceState('listening');
-      // Restart mic after greeting finishes
-      if (jarvisSessionActive && jarvisRecognition) {
-        try { jarvisRecognition.start(); } catch(e) {}
-      }
+      restartRecognition();
     });
   } catch(e) {
     resetVoiceState();
   }
+}
+
+// ── RECOGNITION RESTART ───────────────────────────────────
+function restartRecognition() {
+  if (!jarvisSessionActive || !jarvisRecognition) return;
+  try { jarvisRecognition.stop(); } catch(e) {}
+  setTimeout(() => {
+    if (!jarvisSessionActive || !jarvisRecognition) return;
+    try {
+      jarvisRecognition.start();
+    } catch(e) {
+      if (!e.message.includes('already started') && !e.message.includes('InvalidStateError')) {
+        console.log('restartRecognition error:', e.message);
+      }
+    }
+  }, 250);
 }
 
 // ── VOICE QUEUE ───────────────────────────────────────────
@@ -2558,10 +2573,7 @@ async function sendToJarvis(text) {
       jarvisProcessing = false;
       jarvisListening = true;
       setVoiceState('listening');
-      // Restart mic AFTER audio finishes
-      if (jarvisSessionActive && jarvisRecognition) {
-        try { jarvisRecognition.start(); } catch(e) {}
-      }
+      restartRecognition();
     });
 
   } catch(e) {
