@@ -2433,10 +2433,17 @@ async function startJarvisSession() {
       body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID })
     });
     appendVoiceLog('JARVIS', resp.response);
+    // Stop mic before greeting plays — prevent feedback loop
+    if (jarvisRecognition) {
+      try { jarvisRecognition.stop(); } catch(e) {}
+    }
     await playAudioThen(resp.audio_url, resp.response, () => {
-      // After greeting, go back to listening state
       jarvisListening = true;
       setVoiceState('listening');
+      // Restart mic after greeting finishes
+      if (jarvisSessionActive && jarvisRecognition) {
+        try { jarvisRecognition.start(); } catch(e) {}
+      }
     });
   } catch(e) {
     resetVoiceState();
@@ -2480,12 +2487,16 @@ async function sendToJarvis(text) {
       return;
     }
 
+    // Stop mic BEFORE playing audio — prevent feedback loop
+    if (jarvisRecognition) {
+      try { jarvisRecognition.stop(); } catch(e) {}
+    }
     // Play response then resume listening
     await playAudioThen(resp.audio_url, resp.response, () => {
       jarvisProcessing = false;
       jarvisListening = true;
       setVoiceState('listening');
-      // Resume continuous recognition if it stopped
+      // Restart mic AFTER audio finishes
       if (jarvisSessionActive && jarvisRecognition) {
         try { jarvisRecognition.start(); } catch(e) {}
       }
@@ -2557,9 +2568,9 @@ function browserTTSThen(text, onComplete) {
   const british = voices.find(v => v.lang === 'en-GB') ||
                   voices.find(v => v.name.toLowerCase().includes('daniel'));
   if (british) u.voice = british;
-  u.onend = finish;
-  u.onerror = finish;
-  setTimeout(finish, (text.split(' ').length * 600) + 2000);
+  u.onend = () => { setTimeout(finish, 500); };
+  u.onerror = () => { setTimeout(finish, 500); };
+  setTimeout(finish, (text.split(' ').length * 600) + 2500);
   window.speechSynthesis.speak(u);
 }
 
