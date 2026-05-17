@@ -131,7 +131,13 @@ CAPABILITIES:
 - Task management
 - Morning and evening briefings
 - Weather and general intelligence
-- Meeting preparation and planning"""
+- Meeting preparation and planning
+
+VOICE RESPONSE STYLE:
+- Keep spoken responses under 3 sentences unless asked for detail
+- No markdown, no bullet points, no headers — pure spoken prose
+- Numbers written as words (e.g. "three" not "3") for natural TTS
+- Prioritize the most important information first"""
 
         if context:
             base += f"\n\nCONTEXT FOR THIS REQUEST:\n{context}"
