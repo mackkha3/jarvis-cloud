@@ -1658,7 +1658,9 @@ function startDashboard() {
 // ── Voice state poller — updates reactor class every 2s without rebuilding panel ─
 function pollVoiceState() {
   if (!JARVIS_KEY) return;
+  if (jarvisListening || jarvisRecognition) return;
   jfetch("/voice/status").then(function(d) {
+    if (jarvisListening || jarvisRecognition) return;
     var running = d.running || d.online || false;
     var state   = (d.state || "offline").toLowerCase();
     var info    = _voiceStateInfo(state, running);
@@ -1668,13 +1670,14 @@ function pollVoiceState() {
     var lbl = orb.querySelector(".voice-status-label");
     if (lbl) { lbl.textContent = info.text; lbl.className = "voice-status-label " + info.lbl; }
     var meta = document.getElementById("voice-meta");
-    if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "OFFLINE");
+    if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "READY");
   }).catch(function() {
+    if (jarvisListening || jarvisRecognition) return;
     var orb = document.getElementById("voice-orb");
     if (!orb) return;
-    orb.className = "jarvis-reactor reactor--offline";
+    orb.className = "jarvis-reactor reactor--standby";
     var lbl = orb.querySelector(".voice-status-label");
-    if (lbl) { lbl.textContent = "OFFLINE"; lbl.className = "voice-status-label lbl-error"; }
+    if (lbl) { lbl.textContent = "ONLINE — TAP TO SPEAK"; lbl.className = "voice-status-label"; }
   });
 }
 
@@ -2118,6 +2121,7 @@ function _voiceStateInfo(state, running) {
 
 // ── Panel: Voice Interface — animated orb ─────────────────────────
 async function loadVoice() {
+  if (jarvisListening || jarvisRecognition) return;
   var body = document.getElementById("voice-body");
   var meta = document.getElementById("voice-meta");
   if (!body) return;
@@ -2161,11 +2165,11 @@ async function loadVoice() {
     '<div class="voice-panel-content">' +
     '<div class="voice-conn-status' + (connOnline ? ' online' : '') + '">' +
       '<span class="voice-conn-dot"></span>' +
-      '<span class="voice-conn-txt">' + (connOnline ? 'VOICE ONLINE' : 'VOICE OFFLINE') + '</span>' +
+      '<span class="voice-conn-txt">' + (connOnline ? 'VOICE ONLINE' : 'VOICE READY') + '</span>' +
     '</div>' +
     '<div class="voice-orb-wrap">' +
       '<div class="jarvis-reactor ' + info.orb + '" id="voice-orb">' +
-        '<div class="reactor-svg-wrap" onclick="activateVoice()" title="Tap to activate voice">' +
+        '<div class="reactor-svg-wrap" onclick="toggleListening()" title="Tap to speak">' +
           _voiceOrbSVG() +
         '</div>' +
         '<div class="reactor-subtitle">JUST A RATHER VERY INTELLIGENT SYSTEM</div>' +
@@ -2176,6 +2180,7 @@ async function loadVoice() {
     '</div>';
 
   panelLoaded(body, html);
+  setVoiceState('idle');
   if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "OFFLINE");
 }
 
@@ -2293,6 +2298,197 @@ async function loadAll() {
     loadChart(), loadLog(),    loadTriage(), loadTasks(), loadVoice(),
   ]);
 }
+
+// ====== JARVIS VOICE CONVERSATION ======
+const JARVIS_SESSION_ID = (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
+let jarvisRecognition = null;
+let jarvisListening = false;
+let jarvisSessionActive = false;
+let jarvisProcessing = false;
+let _lastTap = 0;
+
+async function toggleListening() {
+  const _now = Date.now();
+  if (_now - _lastTap < 2000) return;
+  _lastTap = _now;
+  // Instant beep + AudioContext unlock on every tap (user gesture required)
+  try {
+    window._audioCtx = window._audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (window._audioCtx.state === 'suspended') window._audioCtx.resume();
+    const o = window._audioCtx.createOscillator();
+    const g = window._audioCtx.createGain();
+    o.connect(g); g.connect(window._audioCtx.destination);
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.1, window._audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, window._audioCtx.currentTime + 0.15);
+    o.start(window._audioCtx.currentTime); o.stop(window._audioCtx.currentTime + 0.15);
+  } catch(e) {}
+
+  if (jarvisListening) {
+    if (jarvisRecognition) jarvisRecognition.stop();
+    return;
+  }
+  if (!jarvisSessionActive) {
+    await startJarvisSession();
+  } else {
+    startListening();
+  }
+}
+
+async function startJarvisSession() {
+  setVoiceState('processing');
+  try {
+    const resp = await jfetch('/voice/chat', {
+      method: 'POST',
+      body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID })
+    });
+    jarvisSessionActive = true;
+    appendVoiceLog('JARVIS', resp.response);
+    await playAudioThen(resp.audio_url, resp.response, () => setVoiceState('active'));
+  } catch(e) {
+    resetVoiceState();
+    showToast('JARVIS unavailable');
+  }
+}
+
+function startListening() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast("Voice not supported. Use Chrome or Safari.");
+    return;
+  }
+  jarvisRecognition = new SpeechRecognition();
+  jarvisRecognition.continuous = false;
+  jarvisRecognition.interimResults = false;
+  jarvisRecognition.lang = 'en-US';
+  jarvisRecognition.maxAlternatives = 1;
+  jarvisRecognition.onstart = () => { jarvisListening = true; setVoiceState('listening'); };
+  jarvisRecognition.onresult = async (event) => {
+    const text = event.results[0][0].transcript;
+    jarvisListening = false;
+    jarvisRecognition = null;
+    await sendToJarvis(text);
+  };
+  jarvisRecognition.onerror = (e) => {
+    if (e.error !== 'no-speech') showToast('Voice error: ' + e.error);
+    resetVoiceState();
+  };
+  jarvisRecognition.onend = () => {
+    jarvisListening = false;
+    // No auto-restart — Chrome blocks SpeechRecognition outside a user gesture
+    if (jarvisSessionActive && !jarvisProcessing) setVoiceState('active');
+  };
+  jarvisRecognition.start();
+}
+
+async function sendToJarvis(text) {
+  jarvisProcessing = true;
+  setVoiceState('processing');
+  appendVoiceLog('YOU', text);
+  // Immediate "..." placeholder — makes 3-4s wait feel shorter
+  const thinkId = 'think-' + Date.now();
+  appendVoiceLog('JARVIS', '...', thinkId);
+  try {
+    const resp = await jfetch('/voice/chat', {
+      method: 'POST',
+      body: JSON.stringify({ text: text, session_id: JARVIS_SESSION_ID })
+    });
+    const thinkEl = document.getElementById(thinkId);
+    if (thinkEl) thinkEl.remove();
+    if (!resp || resp.error) {
+      resetVoiceState();
+      return;
+    }
+    appendVoiceLog('JARVIS', resp.response);
+    if (resp.session_active === false) {
+      jarvisSessionActive = false;
+      jarvisProcessing = false;
+      await playAudioThen(resp.audio_url, resp.response, () => setVoiceState('idle'));
+      return;
+    }
+    await playAudioThen(resp.audio_url, resp.response, () => {
+      jarvisProcessing = false;
+      if (jarvisSessionActive) setVoiceState('active');
+    });
+  } catch(e) {
+    const thinkEl = document.getElementById(thinkId);
+    if (thinkEl) thinkEl.remove();
+    resetVoiceState();
+    showToast('JARVIS unavailable');
+  }
+}
+
+async function playAudioThen(audioUrl, fallbackText, onComplete) {
+  setVoiceState('speaking');
+  if (audioUrl) {
+    const audio = new Audio(window.location.origin + audioUrl);
+    audio.onended = () => { onComplete && onComplete(); };
+    audio.onerror = () => { resetVoiceState(); onComplete && onComplete(); };
+    try { await audio.play(); }
+    catch(e) { resetVoiceState(); onComplete && onComplete(); }
+  } else {
+    browserTTSThen(fallbackText, onComplete);
+  }
+}
+
+function browserTTSThen(text, onComplete) {
+  if (!window.speechSynthesis) { setVoiceState('idle'); onComplete && onComplete(); return; }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 0.88; u.pitch = 0.75; u.volume = 1.0;
+  const voices = window.speechSynthesis.getVoices();
+  const british = voices.find(v => v.lang === 'en-GB' && v.name.toLowerCase().includes('male')) ||
+                  voices.find(v => v.lang === 'en-GB') ||
+                  voices.find(v => v.name.toLowerCase().includes('daniel'));
+  if (british) u.voice = british;
+  u.onend = () => { onComplete && onComplete(); };
+  window.speechSynthesis.speak(u);
+}
+
+function resetVoiceState() {
+  jarvisListening = false;
+  jarvisProcessing = false;
+  if (jarvisRecognition) {
+    try { jarvisRecognition.stop(); } catch(e) {}
+    jarvisRecognition = null;
+  }
+  setVoiceState(jarvisSessionActive ? 'active' : 'idle');
+}
+
+function setVoiceState(state) {
+  const orb  = document.getElementById('voice-orb');
+  const lbl  = orb ? orb.querySelector('.voice-status-label') : null;
+  const wrap = orb ? orb.querySelector('.reactor-svg-wrap')   : null;
+  const m = {
+    idle:       { cls:'reactor--standby',    text:'ONLINE — TAP TO SPEAK', lbl:'',           glow:'0 0 20px rgba(0,212,255,0.3)' },
+    active:     { cls:'reactor--standby',    text:'TAP TO SPEAK',           lbl:'lbl-active', glow:'0 0 15px rgba(0,212,255,0.4)' },
+    listening:  { cls:'reactor--listening',  text:'LISTENING...',           lbl:'lbl-active', glow:'0 0 30px rgba(0,212,255,0.7)' },
+    processing: { cls:'reactor--processing', text:'PROCESSING...',          lbl:'lbl-amber',  glow:'0 0 30px rgba(255,184,77,0.6)' },
+    speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',        lbl:'lbl-active', glow:'0 0 38px rgba(0,212,255,0.8)' },
+  };
+  const s = m[state] || m.idle;
+  if (orb)  orb.className = 'jarvis-reactor ' + s.cls;
+  if (lbl)  { lbl.textContent = s.text; lbl.className = 'voice-status-label ' + s.lbl; }
+  if (wrap) wrap.style.filter = 'drop-shadow(' + s.glow + ')';
+}
+
+function appendVoiceLog(speaker, text, id) {
+  const log = document.getElementById('log');
+  if (!log) return;
+  const ts = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  log.querySelectorAll('.cursor').forEach(c => c.remove());
+  const line = document.createElement('span');
+  line.className = 'line';
+  if (id) line.id = id;
+  const isUser = speaker === 'YOU';
+  line.innerHTML = '<span class="ts">' + ts + '</span>' +
+    '<span class="' + (isUser?'you':'pfx') + '">' + speaker + '&gt;</span>' +
+    '<span class="' + (isUser?'you':'out') + (id?'" style="opacity:.45':'"') + '">' + esc(text) + '</span>';
+  log.appendChild(line);
+  while (log.querySelectorAll('.line').length > 8) log.removeChild(log.querySelector('.line'));
+  log.scrollTop = log.scrollHeight;
+}
+// ====== END VOICE CONVERSATION ======
 </script>
 <script>
 if ('serviceWorker' in navigator) {
