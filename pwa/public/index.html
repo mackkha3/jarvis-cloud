@@ -2326,6 +2326,9 @@ let jarvisProcessing = false;
 let jarvisListening = false;
 let _lastTap = 0;
 let jarvisSpeakingUntil = 0;  // timestamp — ignore mic input until after this
+let _voiceQueue = [];
+let _processingQueue = false;
+let _recognitionWatchdog = null;
 let JARVIS_TTS_MODE = 'browser';
 const TTS_MODE_LABELS = {
   browser: '🔊 BROWSER VOICE',
@@ -2413,7 +2416,11 @@ async function startJarvisSession() {
       return;
     }
 
-    await sendToJarvis(text);
+    // Only queue if not already processing
+    if (!jarvisProcessing && _voiceQueue.length === 0) {
+      _voiceQueue.push(text);
+      processVoiceQueue();
+    }
   };
 
   jarvisRecognition.onerror = (e) => {
@@ -2437,6 +2444,7 @@ async function startJarvisSession() {
   // Start recognition
   try {
     jarvisRecognition.start();
+    startRecognitionWatchdog();
   } catch(e) {
     showToast('Could not start mic: ' + e.message);
     resetVoiceState();
@@ -2467,6 +2475,37 @@ async function startJarvisSession() {
   } catch(e) {
     resetVoiceState();
   }
+}
+
+// ── VOICE QUEUE ───────────────────────────────────────────
+async function processVoiceQueue() {
+  if (_processingQueue || _voiceQueue.length === 0) return;
+  _processingQueue = true;
+  const text = _voiceQueue.shift();
+  await sendToJarvis(text);
+  _processingQueue = false;
+  if (_voiceQueue.length > 0) processVoiceQueue();
+}
+
+// ── RECOGNITION WATCHDOG ──────────────────────────────────
+function startRecognitionWatchdog() {
+  stopRecognitionWatchdog();
+  _recognitionWatchdog = setInterval(() => {
+    if (!jarvisSessionActive) { stopRecognitionWatchdog(); return; }
+    if (!jarvisProcessing && jarvisListening && Date.now() >= jarvisSpeakingUntil) {
+      try {
+        if (jarvisRecognition) jarvisRecognition.start();
+      } catch(e) {
+        if (!e.message.includes('already started') && !e.message.includes('InvalidStateError')) {
+          console.log('Recognition watchdog restart error:', e.message);
+        }
+      }
+    }
+  }, 3000);
+}
+
+function stopRecognitionWatchdog() {
+  if (_recognitionWatchdog) { clearInterval(_recognitionWatchdog); _recognitionWatchdog = null; }
 }
 
 // ── SEND TO JARVIS ────────────────────────────────────────
@@ -2540,6 +2579,9 @@ function endSession() {
   jarvisSessionActive = false;
   jarvisProcessing = false;
   jarvisListening = false;
+  _voiceQueue = [];
+  _processingQueue = false;
+  stopRecognitionWatchdog();
   if (jarvisRecognition) {
     try { jarvisRecognition.stop(); } catch(e) {}
     jarvisRecognition = null;
@@ -2549,6 +2591,8 @@ function endSession() {
 
 // ── RESET (error recovery) ────────────────────────────────
 function resetVoiceState() {
+  _voiceQueue = [];
+  _processingQueue = false;
   if (!jarvisSessionActive) {
     endSession();
     return;
