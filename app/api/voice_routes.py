@@ -10,6 +10,7 @@ POST /api/voice/conversation/clear — clear session history
 """
 
 import datetime
+import json
 import logging
 import pathlib
 import random
@@ -117,18 +118,28 @@ def _generate_greeting(session: dict, cfg) -> str:
 
 
 # ====== AUDIO HELPER ======
-_MAX_TTS_WORDS = 45  # ~5-6 seconds synthesis on CPU
+_MAX_TTS_WORDS_DEFAULT = 45   # ~5-6 seconds synthesis on CPU
+_MAX_TTS_WORDS_BRIEFING = 200  # briefings / summaries can be longer
+
+_BRIEFING_KEYWORDS = {"briefing", "morning briefing", "evening briefing",
+                      "summary of my day", "day summary", "daily summary",
+                      "brief me", "what's on my", "whats on my"}
 
 
-def _generate_audio(text: str) -> str | None:
-    """Generate Kokoro TTS audio, truncating to _MAX_TTS_WORDS for latency."""
+def _is_briefing_request(text: str) -> bool:
+    lower = text.lower()
+    return any(kw in lower for kw in _BRIEFING_KEYWORDS)
+
+
+def _generate_audio(text: str, is_briefing: bool = False) -> str | None:
+    """Generate Kokoro TTS audio, truncating based on content type for latency."""
     try:
         from app.voice.tts import speak
 
+        limit = _MAX_TTS_WORDS_BRIEFING if is_briefing else _MAX_TTS_WORDS_DEFAULT
         words = text.split()
-        if len(words) > _MAX_TTS_WORDS:
-            truncated = " ".join(words[:_MAX_TTS_WORDS])
-            # Prefer ending at a sentence boundary at least 60% through the truncated text
+        if len(words) > limit:
+            truncated = " ".join(words[:limit])
             for punct in [". ", "! ", "? "]:
                 last = truncated.rfind(punct)
                 if last > len(truncated) * 0.6:
@@ -319,6 +330,35 @@ def register_voice_chat_routes(app: Flask) -> None:
         result = ai.respond(query=user_text, context=context)
         response_text = result.get("response", "")
 
+        # ── Parse and execute <action> tags from Claude's response ──
+        action_match = re.search(r'<action>(.*?)</action>', response_text, re.DOTALL)
+        action_suffix = ""
+        if action_match:
+            try:
+                action_data = json.loads(action_match.group(1).strip())
+                if action_data.get("type") == "create_calendar_event":
+                    from app.integrations.google import GoogleCalendar
+                    cal = GoogleCalendar()
+                    if cal.available:
+                        event = cal.create_event(
+                            title=action_data.get("title", ""),
+                            date=action_data.get("date", ""),
+                            time=action_data.get("time", ""),
+                            duration_minutes=action_data.get("duration_minutes", 60),
+                            description=action_data.get("description", ""),
+                        )
+                        if not event:
+                            action_suffix = " Calendar write failed — check credentials."
+                    else:
+                        action_suffix = " Calendar not connected."
+            except Exception as _ae:
+                logger.warning("Action tag parse error: %s", _ae)
+            # Strip action tag from spoken response
+            response_text = re.sub(r'\s*<action>.*?</action>\s*', ' ', response_text, flags=re.DOTALL).strip()
+
+        if action_suffix:
+            response_text += action_suffix
+
         session["history"].append({"role": "user", "content": user_text})
         session["history"].append({"role": "assistant", "content": response_text})
         if len(session["history"]) > 20:
@@ -327,7 +367,8 @@ def register_voice_chat_routes(app: Flask) -> None:
         follow_up = _get_follow_up(cfg)
         full_response = response_text + " " + follow_up
 
-        audio_url = _generate_audio(full_response)
+        is_briefing = _is_briefing_request(user_text)
+        audio_url = _generate_audio(full_response, is_briefing=is_briefing)
 
         return jsonify({
             "response": full_response,
