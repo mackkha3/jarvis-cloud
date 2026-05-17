@@ -2393,10 +2393,26 @@ async function startJarvisSession() {
   jarvisRecognition.maxAlternatives = 1;
 
   jarvisRecognition.onresult = async (event) => {
-    if (jarvisProcessing) return; // ignore results while processing
+    if (jarvisProcessing) return;
     if (Date.now() < jarvisSpeakingUntil) return; // JARVIS still speaking — discard
+
     const text = event.results[event.results.length - 1][0].transcript.trim();
     if (!text) return;
+
+    // Client-side dismissal — end session without a server round-trip
+    const lowerText = text.toLowerCase();
+    const DISMISSAL_WORDS = ['thank you jarvis', 'thanks jarvis', 'ok jarvis', 'okay jarvis',
+      'that will be all', "that's all", 'stand down', 'goodbye jarvis', 'bye jarvis',
+      'stop jarvis', 'jarvis stop', 'dismiss'];
+
+    if (DISMISSAL_WORDS.some(phrase => lowerText.includes(phrase))) {
+      endSession();
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('Understood. Standing by.');
+      window.speechSynthesis.speak(u);
+      return;
+    }
+
     await sendToJarvis(text);
   };
 
@@ -2483,10 +2499,13 @@ async function sendToJarvis(text) {
     appendVoiceLog('JARVIS', resp.response);
     window._lastJarvisResponse = resp.response;
 
-    // Check for dismissal
+    // Check for dismissal — end session immediately then play farewell without restarting mic
     if (resp.session_active === false) {
-      await playAudioThen(resp.audio_url, resp.response, () => {
-        endSession();
+      endSession();
+      window._lastJarvisResponse = resp.response;
+      setVoiceState('speaking');
+      browserTTSThen(resp.response, () => {
+        setVoiceState('idle');
       });
       return;
     }
@@ -2563,18 +2582,42 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
 }
 
 function browserTTSThen(text, onComplete) {
-  const finish = () => { if (onComplete) onComplete(); };
+  const finish = () => {
+    // Extra silence buffer before mic reopens
+    setTimeout(() => { if (onComplete) onComplete(); }, 1500);
+  };
+
   if (!window.speechSynthesis) { finish(); return; }
   window.speechSynthesis.cancel();
+
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 0.88; u.pitch = 0.75; u.volume = 1.0;
+
   const voices = window.speechSynthesis.getVoices();
   const british = voices.find(v => v.lang === 'en-GB') ||
                   voices.find(v => v.name.toLowerCase().includes('daniel'));
   if (british) u.voice = british;
-  u.onend = () => { setTimeout(finish, 500); };
-  u.onerror = () => { setTimeout(finish, 500); };
-  setTimeout(finish, (text.split(' ').length * 600) + 2500);
+
+  // Update timestamp when speech truly ends
+  u.onend = () => {
+    jarvisSpeakingUntil = Date.now() + 2000; // 2s silence after speech ends
+    finish();
+  };
+  u.onerror = () => {
+    jarvisSpeakingUntil = Date.now() + 1000;
+    finish();
+  };
+
+  // Safety timeout based on word count
+  const safetyMs = (text.split(' ').length * 700) + 3000;
+  setTimeout(() => {
+    if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+    jarvisSpeakingUntil = Date.now() + 2000;
+    finish();
+  }, safetyMs);
+
+  // Set speaking timestamp BEFORE speech starts (worst-case estimate)
+  jarvisSpeakingUntil = Date.now() + safetyMs + 2000;
   window.speechSynthesis.speak(u);
 }
 
