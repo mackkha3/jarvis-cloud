@@ -2325,6 +2325,7 @@ let jarvisSessionActive = false;
 let jarvisProcessing = false;
 let jarvisListening = false;
 let _lastTap = 0;
+let jarvisSpeakingUntil = 0;  // timestamp — ignore mic input until after this
 let JARVIS_TTS_MODE = 'browser';
 const TTS_MODE_LABELS = {
   browser: '🔊 BROWSER VOICE',
@@ -2393,6 +2394,7 @@ async function startJarvisSession() {
 
   jarvisRecognition.onresult = async (event) => {
     if (jarvisProcessing) return; // ignore results while processing
+    if (Date.now() < jarvisSpeakingUntil) return; // JARVIS still speaking — discard
     const text = event.results[event.results.length - 1][0].transcript.trim();
     if (!text) return;
     await sendToJarvis(text);
@@ -2433,6 +2435,7 @@ async function startJarvisSession() {
       body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID })
     });
     appendVoiceLog('JARVIS', resp.response);
+    window._lastJarvisResponse = resp.response;
     // Stop mic before greeting plays — prevent feedback loop
     if (jarvisRecognition) {
       try { jarvisRecognition.stop(); } catch(e) {}
@@ -2478,6 +2481,7 @@ async function sendToJarvis(text) {
     }
 
     appendVoiceLog('JARVIS', resp.response);
+    window._lastJarvisResponse = resp.response;
 
     // Check for dismissal
     if (resp.session_active === false) {
@@ -2587,6 +2591,11 @@ function setVoiceState(state) {
     speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',               lbl:'lbl-active', glow:'' },
     active:     { cls:'reactor--active',     text:'SESSION ACTIVE — TAP TO END',   lbl:'lbl-active', glow:'' },
   };
+
+  if (state === 'speaking') {
+    const wordCount = window._lastJarvisResponse ? window._lastJarvisResponse.split(' ').length : 20;
+    jarvisSpeakingUntil = Date.now() + (wordCount * 120) + 1500;
+  }
 
   const s = m[state] || m.idle;
   if (orb)  orb.className = 'jarvis-reactor ' + s.cls;
