@@ -1641,13 +1641,16 @@ let   JARVIS_KEY = localStorage.getItem("jarvis_api_key") || "";
 })();
 
 // ── Init ─────────────────────────────────────────────────────────
-loadVoicePanel();
-if (JARVIS_KEY) {
-  startDashboard();
-} else {
+if (!JARVIS_KEY) {
   document.getElementById("j-modal").style.display = "flex";
   setTimeout(function(){ var i = document.getElementById("j-key-input"); if (i) i.focus(); }, 80);
 }
+// Defer until after all `let` declarations are initialized (avoids TDZ ReferenceError in loadVoice)
+setTimeout(function() {
+  loadVoicePanel();
+  loadTTSMode();
+  if (JARVIS_KEY) startDashboard();
+}, 0);
 
 function startDashboard() {
   loadAll();
@@ -2175,6 +2178,7 @@ async function loadVoice() {
         '<div class="reactor-subtitle">JUST A RATHER VERY INTELLIGENT SYSTEM</div>' +
         '<div class="voice-status-label ' + info.lbl + '">' + info.text + '</div>' +
       '</div>' +
+      '<div id="tts-mode-indicator" onclick="cycleTTSMode()" style="text-align:center;margin-top:8px;cursor:pointer;font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;opacity:0.6">' + (TTS_MODE_LABELS[JARVIS_TTS_MODE] || TTS_MODE_LABELS.browser) + '</div>' +
     '</div>' +
     '<div class="voice-transcript">' + transcriptHTML + '</div>' +
     '</div>';
@@ -2296,6 +2300,7 @@ async function loadAll() {
   await Promise.allSettled([
     loadBrief(), loadEvents(), loadSystemStatus(),
     loadChart(), loadLog(),    loadTriage(), loadTasks(), loadVoice(),
+    loadTTSMode(),
   ]);
 }
 
@@ -2306,6 +2311,38 @@ let jarvisListening = false;
 let jarvisSessionActive = false;
 let jarvisProcessing = false;
 let _lastTap = 0;
+
+// ── TTS mode ──────────────────────────────────────────────────────
+let JARVIS_TTS_MODE = 'browser';
+const TTS_MODE_LABELS = {
+  browser: '🔊 BROWSER VOICE',
+  openai:  '⚡ OPENAI VOICE',
+  kokoro:  '🤖 KOKORO VOICE',
+};
+
+async function loadTTSMode() {
+  // Prefer stored user preference; fall back to server config default
+  const saved = localStorage.getItem('jarvis_tts_mode');
+  if (saved && TTS_MODE_LABELS[saved]) {
+    JARVIS_TTS_MODE = saved;
+  } else {
+    try {
+      const resp = await jfetch('/voice/tts-mode');
+      if (resp && resp.mode) JARVIS_TTS_MODE = resp.mode;
+    } catch(e) {}
+  }
+  const el = document.getElementById('tts-mode-indicator');
+  if (el) el.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE] || TTS_MODE_LABELS.browser;
+}
+
+function cycleTTSMode() {
+  const modes = ['browser', 'openai', 'kokoro'];
+  JARVIS_TTS_MODE = modes[(modes.indexOf(JARVIS_TTS_MODE) + 1) % modes.length];
+  const el = document.getElementById('tts-mode-indicator');
+  if (el) el.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE];
+  localStorage.setItem('jarvis_tts_mode', JARVIS_TTS_MODE);
+  showToast('Voice: ' + JARVIS_TTS_MODE);
+}
 
 async function toggleListening() {
   const _now = Date.now();
@@ -2420,28 +2457,55 @@ async function sendToJarvis(text) {
 
 async function playAudioThen(audioUrl, fallbackText, onComplete) {
   setVoiceState('speaking');
-  if (audioUrl) {
+
+  const finish = () => {
+    if (onComplete) onComplete();
+  };
+
+  // Browser mode OR no audio — use browser TTS
+  if (JARVIS_TTS_MODE === 'browser' || !audioUrl) {
+    browserTTSThen(fallbackText, finish);
+    return;
+  }
+
+  // Try server audio
+  try {
     const audio = new Audio(window.location.origin + audioUrl);
-    audio.onended = () => { onComplete && onComplete(); };
-    audio.onerror = () => { resetVoiceState(); onComplete && onComplete(); };
-    try { await audio.play(); }
-    catch(e) { resetVoiceState(); onComplete && onComplete(); }
-  } else {
-    browserTTSThen(fallbackText, onComplete);
+    let completed = false;
+    const safeFinish = () => { if (!completed) { completed = true; finish(); } };
+
+    audio.onended = safeFinish;
+    audio.onerror = () => { browserTTSThen(fallbackText, safeFinish); };
+
+    // Timeout safety — if audio hasn't finished in 30s, force complete
+    setTimeout(() => safeFinish(), 30000);
+
+    await audio.play().catch(() => { browserTTSThen(fallbackText, safeFinish); });
+  } catch(e) {
+    browserTTSThen(fallbackText, finish);
   }
 }
 
 function browserTTSThen(text, onComplete) {
-  if (!window.speechSynthesis) { setVoiceState('idle'); onComplete && onComplete(); return; }
+  const finish = () => { setVoiceState('active'); if (onComplete) onComplete(); };
+
+  if (!window.speechSynthesis) { finish(); return; }
+
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 0.88; u.pitch = 0.75; u.volume = 1.0;
+
   const voices = window.speechSynthesis.getVoices();
-  const british = voices.find(v => v.lang === 'en-GB' && v.name.toLowerCase().includes('male')) ||
-                  voices.find(v => v.lang === 'en-GB') ||
+  const british = voices.find(v => v.lang === 'en-GB') ||
                   voices.find(v => v.name.toLowerCase().includes('daniel'));
   if (british) u.voice = british;
-  u.onend = () => { onComplete && onComplete(); };
+
+  u.onend = finish;
+  u.onerror = finish;
+
+  // Safety timeout — browser TTS sometimes hangs
+  setTimeout(finish, (text.split(' ').length * 600) + 2000);
+
   window.speechSynthesis.speak(u);
 }
 
