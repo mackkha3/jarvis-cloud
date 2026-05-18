@@ -2412,9 +2412,21 @@ async function startJarvisSession() {
 
     if (DISMISSAL_WORDS.some(phrase => lowerText.includes(phrase))) {
       endSession();
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance('Understood. Standing by.');
-      window.speechSynthesis.speak(u);
+      setTimeout(() => {
+        window.speechSynthesis.cancel();
+        const variants = [
+          "Understood. Standing by.",
+          "Of course. I'll be here when you need me.",
+          "Right. Standing down.",
+          "Noted. Have a good one.",
+        ];
+        const msg = variants[Math.floor(Math.random() * variants.length)];
+        const u = new SpeechSynthesisUtterance(msg);
+        u.rate = 0.88; u.pitch = 0.75;
+        u.onend = () => setVoiceState('idle');
+        window.speechSynthesis.speak(u);
+        setVoiceState('idle');
+      }, 200);
       return;
     }
 
