@@ -29,6 +29,7 @@ logger = logging.getLogger("jarvis.google")
 # OAuth scopes we need
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/tasks",
     "https://www.googleapis.com/auth/tasks.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -168,6 +169,48 @@ class GoogleCalendar:
         except Exception as e:
             logger.error(f"Calendar upcoming fetch error: {e}")
             return []
+
+    def create_event(
+        self,
+        title: str,
+        date: str,
+        time: str = "",
+        duration_minutes: int = 60,
+        description: str = "",
+    ) -> Optional[dict]:
+        """Create a calendar event. date: YYYY-MM-DD, time: HH:MM (24h). Returns created event or None."""
+        if not self.available:
+            return None
+        try:
+            import zoneinfo
+            cfg = get_config()
+            tz = zoneinfo.ZoneInfo(cfg.timezone)
+
+            if time:
+                start_dt = datetime.fromisoformat(f"{date}T{time}").replace(tzinfo=tz)
+                end_dt = start_dt + timedelta(minutes=duration_minutes)
+                event_body = {
+                    "summary": title,
+                    "description": description,
+                    "start": {"dateTime": start_dt.isoformat(), "timeZone": cfg.timezone},
+                    "end": {"dateTime": end_dt.isoformat(), "timeZone": cfg.timezone},
+                }
+            else:
+                event_body = {
+                    "summary": title,
+                    "description": description,
+                    "start": {"date": date},
+                    "end": {"date": date},
+                }
+
+            result = self.service.events().insert(
+                calendarId="primary", body=event_body
+            ).execute()
+            logger.info("Calendar event created: '%s' on %s", title, date)
+            return result
+        except Exception as e:
+            logger.error(f"Calendar event creation error: {e}")
+            return None
 
     def _format_events(self, raw_events: list) -> list[dict]:
         """Normalise raw Google Calendar events into clean dicts."""
@@ -348,3 +391,53 @@ class GoogleGmail:
         except Exception as e:
             logger.error(f"Gmail fetch error: {e}")
             return []
+
+
+def get_jarvis_context() -> str:
+    """
+    Return a formatted context string for JARVIS voice chat:
+    current time, today's calendar events, open tasks, unread email count.
+    Best-effort — individual failures are skipped silently.
+    """
+    now = datetime.now()
+    lines = [f"Current time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}"]
+
+    try:
+        cal = GoogleCalendar()
+        events = cal.get_todays_events()
+        if events:
+            lines.append(f"\nToday's calendar ({len(events)} event{'s' if len(events) != 1 else ''}):")
+            for e in events:
+                start = e.get("start", "")
+                if "T" in start:
+                    try:
+                        dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                        start = dt.strftime("%I:%M %p")
+                    except Exception:
+                        pass
+                lines.append(f"  - {start}: {e.get('summary', 'Untitled')}")
+        else:
+            lines.append("\nNo events scheduled today.")
+    except Exception:
+        pass
+
+    try:
+        tasks = GoogleTasks()
+        task_list = tasks.get_tasks(max_results=5)
+        if task_list:
+            lines.append(f"\nOpen tasks ({len(task_list)}):")
+            for t in task_list:
+                lines.append(f"  - {t.get('title', '')}")
+        else:
+            lines.append("\nNo open tasks.")
+    except Exception:
+        pass
+
+    try:
+        gmail = GoogleGmail()
+        unread = gmail.get_unread_count()
+        lines.append(f"\nUnread emails in inbox: {unread}")
+    except Exception:
+        pass
+
+    return "\n".join(lines)

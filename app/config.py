@@ -127,6 +127,16 @@ class JarvisConfig(BaseSettings):
                     "Leave blank to disable weather features.",
     )
 
+    # ===== VOICE / TTS =====
+    tts_mode: Literal["browser", "openai", "kokoro"] = Field(
+        default="browser",
+        description="TTS mode: browser (device voice, free), openai (fast, API cost), kokoro (local, slow)",
+    )
+    openai_api_key: str = Field(
+        default="",
+        description="OpenAI API key for TTS. Required only if tts_mode=openai.",
+    )
+
     # ===== LOGGING =====
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO",

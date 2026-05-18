@@ -92,6 +92,8 @@ def create_app() -> Flask:
     from app.api.dashboard_routes import register_dashboard_routes
     register_dashboard_routes(app)
     from app.api.briefing_routes import register_briefing_routes
+    from app.api.voice_routes import register_voice_chat_routes
+    register_voice_chat_routes(app)
     register_briefing_routes(app)
     from app.api.voice_routes import register_voice_routes
     register_voice_routes(app)
