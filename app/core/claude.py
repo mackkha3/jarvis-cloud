@@ -16,6 +16,7 @@ Usage:
 import re
 import logging
 from datetime import datetime
+import pytz
 from typing import Optional
 import anthropic
 
@@ -31,12 +32,12 @@ L1_PATTERNS = [
     # Time queries
     (
         re.compile(r"\b(what(?:'s| is) the time|current time|time (is it|now))\b", re.I),
-        lambda cfg: f"It's {datetime.now().strftime('%I:%M %p')} {cfg.timezone.split('/')[-1]} time."
+        lambda cfg: f"It's {datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago")).strftime('%I:%M %p')} {cfg.timezone.split('/')[-1]} time."
     ),
     # Date queries
     (
         re.compile(r"\b(what(?:'s| is) (today|the date)|today'?s? date)\b", re.I),
-        lambda cfg: f"Today is {datetime.now().strftime('%A, %B %d, %Y')}."
+        lambda cfg: f"Today is {datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago")).strftime('%A, %B %d, %Y')}."
     ),
     # Greeting responses
     (
@@ -58,7 +59,7 @@ L1_PATTERNS = [
 
 def _time_of_day() -> str:
     """Returns morning/afternoon/evening based on current hour."""
-    hour = datetime.now().hour
+    hour = datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago")).hour
     if hour < 12:
         return "morning"
     elif hour < 17:
@@ -107,7 +108,7 @@ class JarvisAI:
         Personalised per customer config. Context (calendar, email, etc.)
         is injected here when available.
         """
-        now = datetime.now()
+        now = datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago"))
         base = f"""You are JARVIS — Just A Rather Very Intelligent System. You are a personal AI assistant modeled after Tony Stark's JARVIS from Iron Man.
 
 You are serving: {self.cfg.owner_name} ({self.cfg.owner_title})

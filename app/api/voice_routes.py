@@ -10,6 +10,7 @@ POST /api/voice/conversation/clear — clear session history
 """
 
 import datetime
+import pytz
 import json
 import logging
 import pathlib
@@ -114,7 +115,7 @@ def _get_dismissal_response(cfg) -> str:
 # ====== GREETING LOGIC ======
 def _generate_greeting(session: dict, cfg) -> str:
     """Time-aware, gap-aware greeting — no external API calls for instant response."""
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone("America/Chicago"))
     hour = now.hour
     gap = time.time() - session["last_active"] if session["last_active"] else 999999
 
@@ -177,7 +178,7 @@ def _generate_audio(text: str, is_briefing: bool = False) -> str | None:
 def _get_jarvis_context() -> str:
     try:
         from app.integrations.google import GoogleCalendar, GoogleTasks, GoogleGmail
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(pytz.timezone("America/Chicago"))
         parts = [f"Current time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}"]
 
         cal = GoogleCalendar()
