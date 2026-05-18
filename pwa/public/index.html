@@ -811,6 +811,17 @@
     .voice-cmd{ overflow-wrap:break-word; }
   }
 
+  /* Narrow phone (≤420px) — tighten pills and topbar further */
+  @media (max-width:420px){
+    .topbar{ padding:0 6px; gap:0; }
+    .brand{ gap:6px; }
+    .status-strip{ gap:3px; }
+    .pill{ font-size:7px; letter-spacing:.05em; padding:2px 5px; gap:2px; white-space:nowrap; }
+    .pill .pulse{ width:4px; height:4px; }
+    .hdr-btn{ font-size:7px; padding:3px 6px; }
+    .brand-text .word{ font-size:11px; letter-spacing:.08em; }
+  }
+
 
   /* ============ J.A.R.V.I.S LIVE DATA LAYER ============ */
 
@@ -2210,7 +2221,7 @@ async function loadVoice() {
   var _initOrb = document.getElementById('voice-orb');
   if (_initOrb) {
     _initOrb.classList.add('reactor--init');
-    setTimeout(function() { if (_initOrb) _initOrb.classList.remove('reactor--init'); }, 500);
+    setTimeout(function() { if (_initOrb) _initOrb.classList.remove('reactor--init'); }, 1500);
   }
   setVoiceState('idle');
   if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "READY");
@@ -2655,19 +2666,32 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
   setVoiceState('speaking');
   const finish = () => { if (onComplete) onComplete(); };
 
+  // Browser mode OR no audio URL — use browser TTS directly
   if (JARVIS_TTS_MODE === 'browser' || !audioUrl) {
     browserTTSThen(fallbackText, finish);
     return;
   }
 
+  // OpenAI or Kokoro mode — try server audio on ALL browsers
+  // If it fails for any reason (iOS restriction, network, etc), fall back to browser TTS
   try {
     const audio = new Audio(window.location.origin + audioUrl);
     let completed = false;
     const safeFinish = () => { if (!completed) { completed = true; finish(); } };
+
     audio.onended = safeFinish;
-    audio.onerror = () => { browserTTSThen(fallbackText, safeFinish); };
+    audio.onerror = () => {
+      browserTTSThen(fallbackText, safeFinish);
+    };
+
+    // Safety timeout — if audio hangs, force completion
     setTimeout(() => safeFinish(), 30000);
-    await audio.play().catch(() => browserTTSThen(fallbackText, safeFinish));
+
+    // Try to play — if iOS blocks it, catch and fall back
+    await audio.play().catch(() => {
+      browserTTSThen(fallbackText, safeFinish);
+    });
+
   } catch(e) {
     browserTTSThen(fallbackText, finish);
   }
