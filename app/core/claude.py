@@ -17,6 +17,15 @@ import re
 import logging
 from datetime import datetime
 import pytz
+
+_CHICAGO_TZ = pytz.timezone("America/Chicago")
+
+def _chicago_time():
+    return f"It's {datetime.now(_CHICAGO_TZ).strftime('%I:%M %p')} Chicago time."
+
+def _chicago_date():
+    return f"Today is {datetime.now(_CHICAGO_TZ).strftime('%A, %B %d, %Y')}."
+
 from typing import Optional
 import anthropic
 
@@ -32,12 +41,12 @@ L1_PATTERNS = [
     # Time queries
     (
         re.compile(r"\b(what(?:'s| is) the time|current time|time (is it|now))\b", re.I),
-        lambda cfg: f"It's {datetime.now(pytz.timezone('America/Chicago')).strftime('%I:%M %p')} Chicago time."
+        lambda cfg: _chicago_time()
     ),
     # Date queries
     (
         re.compile(r"\b(what(?:'s| is) (today|the date)|today'?s? date)\b", re.I),
-        lambda cfg: f"Today is {datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago")).strftime('%A, %B %d, %Y')}."
+        lambda cfg: _chicago_date()
     ),
     # Greeting responses
     (
@@ -59,7 +68,7 @@ L1_PATTERNS = [
 
 def _time_of_day() -> str:
     """Returns morning/afternoon/evening based on current hour."""
-    hour = datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago")).hour
+    hour = datetime.now(_CHICAGO_TZ).hour
     if hour < 12:
         return "morning"
     elif hour < 17:
@@ -108,7 +117,7 @@ class JarvisAI:
         Personalised per customer config. Context (calendar, email, etc.)
         is injected here when available.
         """
-        now = datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago"))
+        now = datetime.now(pytz.timezone(self.cfg.timezone))
         base = f"""You are JARVIS — Just A Rather Very Intelligent System. You are a personal AI assistant modeled after Tony Stark's JARVIS from Iron Man.
 
 You are serving: {self.cfg.owner_name} ({self.cfg.owner_title})
