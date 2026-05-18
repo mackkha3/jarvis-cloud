@@ -362,12 +362,12 @@
       radial-gradient(ellipse 70% 60% at 50% 55%, rgba(0,90,200,0.25), transparent 70%),
       radial-gradient(ellipse 40% 30% at 50% 50%, rgba(0,212,255,0.15), transparent 70%);
   }
-  .core-rings{position:relative;width:340px;height:340px;max-width:90%;max-height:90%}
+  .core-rings{position:relative;width:340px;height:340px;max-width:90%;max-height:90%;transform:translateZ(0);will-change:transform}
   .core-rings svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 
-  .ring-rotate-slow{animation:rot 24s linear infinite;transform-origin:50% 50%}
-  .ring-rotate-rev{animation:rot 36s linear infinite reverse;transform-origin:50% 50%}
-  .ring-rotate-fast{animation:rot 14s linear infinite;transform-origin:50% 50%}
+  .ring-rotate-slow{animation:rot 24s linear infinite;transform-origin:50% 50%;will-change:transform}
+  .ring-rotate-rev{animation:rot 36s linear infinite reverse;transform-origin:50% 50%;will-change:transform}
+  .ring-rotate-fast{animation:rot 14s linear infinite;transform-origin:50% 50%;will-change:transform}
   @keyframes rot{to{transform:rotate(360deg)}}
 
   .core-center{
@@ -809,6 +809,14 @@
     .progress-head{ flex-wrap:wrap; row-gap:2px; }
     .trigger{ overflow-wrap:break-word; }
     .voice-cmd{ overflow-wrap:break-word; }
+
+    /* ── Reactor performance: disable two of three ring rotations ─── */
+    .ring-rotate-rev{ animation:none; }
+    .ring-rotate-fast{ animation:none; }
+
+    /* ── Disable viewport/panel scan sweeps on mobile ────────────── */
+    body::after{ animation:none; }
+    .viewport-scan,[class*="scan"]{ animation:none; }
   }
 
   /* Narrow phone (≤420px) — tighten pills and topbar further */
@@ -2687,10 +2695,14 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
     // Safety timeout — if audio hangs, force completion
     setTimeout(() => safeFinish(), 30000);
 
-    // Try to play — if iOS blocks it, catch and fall back
-    await audio.play().catch(() => {
-      browserTTSThen(fallbackText, safeFinish);
-    });
+    try {
+      await audio.play();
+      // Play succeeded — audio is playing, onended will fire
+    } catch(playErr) {
+      // Safari NotAllowedError or any other play failure — fall back immediately
+      completed = true;
+      browserTTSThen(fallbackText, finish);
+    }
 
   } catch(e) {
     browserTTSThen(fallbackText, finish);
