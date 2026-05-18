@@ -83,7 +83,7 @@ def _openai(text: str) -> Optional[bytes]:
         client = OpenAI(api_key=api_key)
         response = client.audio.speech.create(
             model="tts-1",
-            voice="onyx",
+            voice="echo",
             input=text,
             response_format="wav",
         )
@@ -116,7 +116,7 @@ def _openai_tts(text: str) -> Optional[bytes]:
         client = OpenAI(api_key=cfg.openai_api_key)
         response = client.audio.speech.create(
             model="tts-1",
-            voice="onyx",
+            voice="echo",
             input=text,
             response_format="wav",
         )
