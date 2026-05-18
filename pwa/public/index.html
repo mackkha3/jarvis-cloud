@@ -2356,7 +2356,16 @@ function cycleTTSMode() {
 }
 
 // ── TAP HANDLER ──────────────────────────────────────────
+function unlockIOSAudio() {
+  if (window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  }
+}
+
 async function toggleListening() {
+  unlockIOSAudio();
   const now = Date.now();
   if (now - _lastTap < 2000) return;
   _lastTap = now;
@@ -2652,43 +2661,52 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
 }
 
 function browserTTSThen(text, onComplete) {
-  const finish = () => {
-    // Extra silence buffer before mic reopens
-    setTimeout(() => { if (onComplete) onComplete(); }, 1500);
-  };
-
+  const finish = () => { if (onComplete) onComplete(); };
   if (!window.speechSynthesis) { finish(); return; }
+
   window.speechSynthesis.cancel();
 
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = 0.88; u.pitch = 0.75; u.volume = 1.0;
+  const speak = () => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.88; u.pitch = 0.75; u.volume = 1.0;
 
-  const voices = window.speechSynthesis.getVoices();
-  const british = voices.find(v => v.lang === 'en-GB') ||
-                  voices.find(v => v.name.toLowerCase().includes('daniel'));
-  if (british) u.voice = british;
+    const voices = window.speechSynthesis.getVoices();
+    const british = voices.find(v => v.lang === 'en-GB') ||
+                    voices.find(v => v.name.toLowerCase().includes('daniel')) ||
+                    voices.find(v => v.lang.startsWith('en'));
+    if (british) u.voice = british;
 
-  // Update timestamp when speech truly ends
-  u.onend = () => {
-    jarvisSpeakingUntil = Date.now() + 2000; // 2s silence after speech ends
-    finish();
+    u.onend = () => {
+      jarvisSpeakingUntil = Date.now() + 2000;
+      setTimeout(finish, 1500);
+    };
+    u.onerror = () => {
+      jarvisSpeakingUntil = Date.now() + 1000;
+      setTimeout(finish, 1500);
+    };
+
+    const wordCount = text.split(' ').length;
+    const safetyMs = (wordCount * 700) + 3000;
+    setTimeout(() => {
+      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+      jarvisSpeakingUntil = Date.now() + 2000;
+      finish();
+    }, safetyMs);
+
+    jarvisSpeakingUntil = Date.now() + safetyMs + 2000;
+    window.speechSynthesis.speak(u);
   };
-  u.onerror = () => {
-    jarvisSpeakingUntil = Date.now() + 1000;
-    finish();
-  };
 
-  // Safety timeout based on word count
-  const safetyMs = (text.split(' ').length * 700) + 3000;
-  setTimeout(() => {
-    if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-    jarvisSpeakingUntil = Date.now() + 2000;
-    finish();
-  }, safetyMs);
-
-  // Set speaking timestamp BEFORE speech starts (worst-case estimate)
-  jarvisSpeakingUntil = Date.now() + safetyMs + 2000;
-  window.speechSynthesis.speak(u);
+  // Safari fix: voices list may be empty until onvoiceschanged fires
+  if (window.speechSynthesis.getVoices().length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      speak();
+    };
+    setTimeout(speak, 500); // fallback if onvoiceschanged never fires
+  } else {
+    speak();
+  }
 }
 
 // ── VOICE STATE DISPLAY ───────────────────────────────────
