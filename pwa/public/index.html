@@ -35,12 +35,13 @@
     --border-soft:rgba(0,212,255,0.12);
     --glow:0 0 24px rgba(0,212,255,0.18);
   }
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-weight:400;letter-spacing:.02em}
-  html{overflow-x:hidden}
+  *, *::before, *::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-weight:400;letter-spacing:.02em;width:100%;max-width:100%}
+  html{overflow-x:hidden;width:100%;max-width:100%}
   body{
     min-height:100vh;
     overflow-x:hidden;
+    width:100%;max-width:100%;
     /* hex tessellation + ambient radial glows */
     background:
       radial-gradient(ellipse 60% 45% at 50% 60%, rgba(0,80,180,0.18), transparent 70%),
@@ -85,6 +86,8 @@
     height:100vh;
     padding:14px;
     gap:14px;
+    overflow-x:hidden;
+    max-width:100%;
   }
 
   /* ============ PANEL FRAMING ============ */
@@ -924,6 +927,9 @@
     50%{filter:drop-shadow(0 0 25px rgba(0,212,255,0.9))}
   }
   .reactor--listening{animation:reactor-listening 1s ease-in-out infinite;cursor:pointer}
+
+  /* INIT — suppress all animations during first paint to prevent flicker */
+  .reactor--init *{animation:none !important;transition:none !important;}
 
   /* r-core-amber: amber overlay visible only in PROCESSING */
   .r-core-amber{opacity:0;transition:opacity .5s}
@@ -2200,6 +2206,12 @@ async function loadVoice() {
     '</div>';
 
   panelLoaded(body, html);
+  // Suppress animations during initial paint — prevent amber→cyan flicker on first load
+  var _initOrb = document.getElementById('voice-orb');
+  if (_initOrb) {
+    _initOrb.classList.add('reactor--init');
+    setTimeout(function() { if (_initOrb) _initOrb.classList.remove('reactor--init'); }, 500);
+  }
   setVoiceState('idle');
   if (meta) meta.textContent = "VOICE \xb7 " + (running ? state.toUpperCase() : "READY");
 }
@@ -2365,7 +2377,6 @@ function unlockIOSAudio() {
 }
 
 async function toggleListening() {
-  unlockIOSAudio();
   const now = Date.now();
   if (now - _lastTap < 2000) return;
   _lastTap = now;
@@ -2487,6 +2498,8 @@ async function startJarvisSession() {
     if (jarvisRecognition) {
       try { jarvisRecognition.stop(); } catch(e) {}
     }
+    // Unlock speech synthesis here — still within user gesture, not pre-consumed by silent utterance
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     await playAudioThen(resp.audio_url, resp.response, () => {
       jarvisListening = true;
       setVoiceState('listening');
