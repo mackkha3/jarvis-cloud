@@ -817,6 +817,19 @@
     /* ── Disable viewport/panel scan sweeps on mobile ────────────── */
     body::after{ animation:none; }
     .viewport-scan,[class*="scan"]{ animation:none; }
+
+    /* ── Reactor: disable expensive drop-shadow filters on mobile ─── */
+    .reactor--processing .reactor-svg-wrap,
+    .reactor--speaking .reactor-svg-wrap,
+    .jarvis-reactor .reactor-svg-wrap { filter:none !important; }
+
+    /* ── Reactor: replace container filter-animations with opacity ── */
+    .reactor--active,
+    .reactor--listening { animation:none; }
+
+    /* ── Use cheap box-shadow on core for listening/active glow ──── */
+    .reactor--listening .voice-orb-inner,
+    .reactor--active .voice-orb-inner { box-shadow:0 0 15px rgba(0,212,255,0.5); }
   }
 
   /* Narrow phone (≤420px) — tighten pills and topbar further */
@@ -916,11 +929,13 @@
   .reactor--listening .r-core-g{animation:rCoreIdle 1.8s ease-in-out infinite}
   .reactor--listening .reactor-svg-wrap{filter:drop-shadow(0 0 22px rgba(0,212,255,.45))}
 
-  /* PROCESSING — outer CW, inner arc CCW, core fast, amber tint */
+  /* PROCESSING — outer CW, inner arc CCW, core fast, amber tint; no heavy drop-shadow */
   .reactor--processing .r-outer-g{animation:rRotCW20 10s linear infinite}
   .reactor--processing .r-mid-g{animation:rRotCCW10 7s linear infinite}
-  .reactor--processing .r-core-g{animation:rCoreIdle 1s ease-in-out infinite}
+  .reactor--processing .r-core-g{animation:processingPulse .8s ease-in-out infinite}
   .reactor--processing .r-core-amber{opacity:.35}
+  .reactor--processing .reactor-svg-wrap{filter:none}
+  @keyframes processingPulse{0%,100%{opacity:.6}50%{opacity:1}}
 
   /* SPEAKING — fast rotations, core pulses, highlight pulses, max glow */
   .reactor--speaking .r-outer-g{animation:rRotCW20 6s linear infinite}
@@ -2767,7 +2782,7 @@ function setVoiceState(state) {
   const m = {
     idle:       { cls:'reactor--standby',    text:'TAP TO START',                  lbl:'',           glow:'0 0 20px rgba(0,212,255,0.3)' },
     listening:  { cls:'reactor--listening',  text:'LISTENING...',                  lbl:'lbl-active', glow:'' },
-    processing: { cls:'reactor--processing', text:'PROCESSING...',                 lbl:'lbl-amber',  glow:'0 0 30px rgba(255,184,77,0.6)' },
+    processing: { cls:'reactor--processing', text:'PROCESSING...',                 lbl:'lbl-amber',  glow:'' },
     speaking:   { cls:'reactor--speaking',   text:'JARVIS SPEAKING',               lbl:'lbl-active', glow:'' },
     active:     { cls:'reactor--active',     text:'SESSION ACTIVE — TAP TO END',   lbl:'lbl-active', glow:'' },
   };
