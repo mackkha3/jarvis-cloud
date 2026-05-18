@@ -89,6 +89,20 @@ _DISMISSALS = [
 ]
 
 
+def _is_mid_task(response_text: str) -> bool:
+    """Detect if JARVIS is mid-task — suppress follow-up prompt."""
+    text = response_text.lower().strip()
+    if text.endswith('?'):
+        return True
+    mid_task_phrases = [
+        'what should i call', 'what date', 'what time', 'how long',
+        'what would you like', 'could you provide', 'tell me more',
+        'what title', 'what name', 'can you give me', 'please provide',
+        'which day', 'what day', 'any other details',
+    ]
+    return any(phrase in text for phrase in mid_task_phrases)
+
+
 def _get_follow_up(cfg) -> str:
     return random.choice(_FOLLOW_UPS).format(title=cfg.owner_title)
 
@@ -364,8 +378,11 @@ def register_voice_chat_routes(app: Flask) -> None:
         if len(session["history"]) > 20:
             session["history"] = session["history"][-20:]
 
-        follow_up = _get_follow_up(cfg)
-        full_response = response_text + " " + follow_up
+        if _is_mid_task(response_text):
+            full_response = response_text
+        else:
+            follow_up = _get_follow_up(cfg)
+            full_response = response_text + " " + follow_up
 
         is_briefing = _is_briefing_request(user_text)
         audio_url = _generate_audio(full_response, is_briefing=is_briefing)
