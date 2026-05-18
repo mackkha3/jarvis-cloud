@@ -98,6 +98,35 @@ def _openai(text: str) -> Optional[bytes]:
         return None
 
 
+# ── Backend 2b: OpenAI TTS (mode-aware, with Kokoro fallback) ─────────────────
+
+def _openai_tts(text: str) -> Optional[bytes]:
+    """
+    Synthesize via OpenAI TTS, reading key from config.
+    Falls back to Kokoro daemon when key is not set.
+    Returns None only on outright failure (caller handles further fallback).
+    """
+    try:
+        from openai import OpenAI
+        from app.config import get_config
+        cfg = get_config()
+        if not cfg.openai_api_key:
+            logger.warning("OpenAI TTS requested but OPENAI_API_KEY not set — falling back to Kokoro")
+            return _kokoro(text, _DEFAULT_VOICE)
+        client = OpenAI(api_key=cfg.openai_api_key)
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="onyx",
+            input=text,
+            response_format="wav",
+        )
+        logger.debug("OpenAI TTS synthesized %d chars", len(text))
+        return response.content
+    except Exception as e:
+        logger.error("OpenAI TTS error: %s", e)
+        return None
+
+
 # ── Backend 3: macOS say ──────────────────────────────────────────────────────
 
 def _say(text: str) -> None:
@@ -137,10 +166,15 @@ def speak(text: str, voice: str = _DEFAULT_VOICE) -> Optional[bytes]:
         return None  # frontend uses Web Speech API — no server synthesis needed
 
     if cfg.tts_mode == "openai":
-        wav = _openai(clean_text)
+        wav = _openai_tts(clean_text)
         if wav:
             _active_backend = "openai"
-        return wav  # None on failure — frontend falls back to browser TTS
+            return wav
+        logger.warning("OpenAI TTS failed — falling back to Kokoro")
+        wav = _kokoro(clean_text, voice)
+        if wav:
+            _active_backend = "kokoro"
+        return wav
 
     # kokoro mode: full fallback chain
     wav = _kokoro(clean_text, voice)
