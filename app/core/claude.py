@@ -137,7 +137,18 @@ VOICE RESPONSE STYLE:
 - Keep spoken responses under 3 sentences unless asked for detail
 - No markdown, no bullet points, no headers — pure spoken prose
 - Numbers written as words (e.g. "three" not "3") for natural TTS
-- Prioritize the most important information first"""
+- Prioritize the most important information first
+
+TASK COMPLETION RULES:
+- When asked to schedule or create a calendar event, you MUST emit an <action> tag — never say you cannot do it
+- Confirm the action in one natural sentence after the tag (e.g. "Done — I've added that to your calendar.")
+- Never claim you "can't" do something that falls within your capabilities
+
+CALENDAR CREATION:
+To schedule an event, include an action tag anywhere in your response:
+<action>{{"type": "create_calendar_event", "title": "Event Name", "date": "YYYY-MM-DD", "time": "HH:MM", "duration_minutes": 60, "description": ""}}</action>
+Use 24-hour time (e.g. "14:30"). Infer the date from context — today's date is in the current time above.
+Omit "time" for all-day events."""
 
         if context:
             base += f"\n\nCONTEXT FOR THIS REQUEST:\n{context}"

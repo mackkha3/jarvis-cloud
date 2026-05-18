@@ -116,31 +116,43 @@ def _say(text: str) -> None:
 
 def speak(text: str, voice: str = _DEFAULT_VOICE) -> Optional[bytes]:
     """
-    Synthesize text to WAV bytes.
+    Synthesize text to WAV bytes, respecting cfg.tts_mode.
 
-    Returns WAV bytes on success (Kokoro or OpenAI).
-    Returns None if only macOS say was used (plays locally, no serializable audio).
-    Returns None if all backends failed.
+    browser  → return None immediately (frontend uses Web Speech API)
+    openai   → call OpenAI TTS; return None on failure (frontend falls back)
+    kokoro   → call Kokoro; fall back to OpenAI then macOS say
+
+    Returns WAV bytes, or None if browser mode / all backends failed.
     """
     global _active_backend
+    from app.config import get_config
 
     clean_text = _clean(text)
     if not clean_text:
         return None
 
-    # Backend 1: Kokoro daemon
+    cfg = get_config()
+
+    if cfg.tts_mode == "browser":
+        return None  # frontend uses Web Speech API — no server synthesis needed
+
+    if cfg.tts_mode == "openai":
+        wav = _openai(clean_text)
+        if wav:
+            _active_backend = "openai"
+        return wav  # None on failure — frontend falls back to browser TTS
+
+    # kokoro mode: full fallback chain
     wav = _kokoro(clean_text, voice)
     if wav:
         _active_backend = "kokoro"
         return wav
 
-    # Backend 2: OpenAI TTS
     wav = _openai(clean_text)
     if wav:
         _active_backend = "openai"
         return wav
 
-    # Backend 3: macOS say (local playback only)
     _say(clean_text)
     _active_backend = "say"
     return None
