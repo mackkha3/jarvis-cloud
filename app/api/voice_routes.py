@@ -134,11 +134,16 @@ def _generate_greeting(session: dict, cfg) -> str:
 
 # ====== AUDIO HELPER ======
 _MAX_TTS_WORDS_DEFAULT = 45   # ~5-6 seconds synthesis on CPU
-_MAX_TTS_WORDS_BRIEFING = 200  # briefings / summaries can be longer
+_MAX_TTS_WORDS_BRIEFING = 250  # briefings / summaries can be longer
 
-_BRIEFING_KEYWORDS = {"briefing", "morning briefing", "evening briefing",
-                      "summary of my day", "day summary", "daily summary",
-                      "brief me", "what's on my", "whats on my"}
+_BRIEFING_KEYWORDS = {
+    "briefing", "morning briefing", "evening briefing",
+    "evening debrief", "debrief", "summary of my day",
+    "day summary", "daily summary", "brief me",
+    "what's on my", "whats on my", "schedule for today",
+    "schedule for tomorrow", "what do i have", "calendar today",
+    "calendar tomorrow", "tasks for today", "tasks for tomorrow",
+}
 
 
 def _is_briefing_request(text: str) -> bool:
