@@ -2598,7 +2598,9 @@ function endSession() {
     try { jarvisRecognition.stop(); } catch(e) {}
     jarvisRecognition = null;
   }
-  setVoiceState('idle');
+  setTimeout(() => {
+    if (!jarvisSessionActive) setVoiceState('idle');
+  }, 500);
 }
 
 // ── RESET (error recovery) ────────────────────────────────
