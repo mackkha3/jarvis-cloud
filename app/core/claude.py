@@ -32,7 +32,7 @@ L1_PATTERNS = [
     # Time queries
     (
         re.compile(r"\b(what(?:'s| is) the time|current time|time (is it|now))\b", re.I),
-        lambda cfg: f"It's {datetime.now(pytz.timezone(self.cfg.timezone if hasattr(self, "cfg") else "America/Chicago")).strftime('%I:%M %p')} {cfg.timezone.split('/')[-1]} time."
+        lambda cfg: f"It's {datetime.now(pytz.timezone('America/Chicago')).strftime('%I:%M %p')} Chicago time."
     ),
     # Date queries
     (
