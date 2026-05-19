@@ -805,7 +805,9 @@
     body{ overflow-x:hidden; width:100%; }
     *{ max-width:100%; }
     .app{ overflow:hidden; }
-    .topbar{ width:100%; overflow:hidden; }
+    .topbar{ width:100%; overflow:hidden; box-sizing:border-box; }
+    .center-strip{ display:none; }
+    .status-strip{ margin-left:auto; flex-shrink:0; }
     .nominal{ flex-wrap:wrap; row-gap:4px; }
     .triage-meta{ flex-wrap:wrap; row-gap:4px; }
     .voice-active{ flex-wrap:wrap; row-gap:6px; }
