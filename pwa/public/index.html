@@ -1716,6 +1716,26 @@ function startDashboard() {
   loadAll();
   setInterval(loadAll, 60000);
   setTimeout(function(){ setInterval(pollVoiceState, 2000); }, 3000);
+  setTimeout(initLocation, 2000);
+}
+
+// ── GPS Location ──────────────────────────────────────────────────
+function initLocation() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      var lat = pos.coords.latitude;
+      var lon = pos.coords.longitude;
+      window.JARVIS_LAT = lat;
+      window.JARVIS_LON = lon;
+      jfetch('/location', {
+        method: 'POST',
+        body: JSON.stringify({ lat: lat, lon: lon })
+      }).catch(function(){});
+    },
+    function(){}, // silent fail — use config defaults
+    { timeout: 10000, maximumAge: 300000 }
+  );
 }
 
 // ── Voice state poller — updates reactor class every 2s without rebuilding panel ─
@@ -2530,7 +2550,7 @@ async function startJarvisSession() {
   try {
     const resp = await jfetch('/voice/chat', {
       method: 'POST',
-      body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID })
+      body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID, lat: window.JARVIS_LAT || null, lon: window.JARVIS_LON || null })
     });
     appendVoiceLog('JARVIS', resp.response);
     window._lastJarvisResponse = resp.response;
@@ -2611,7 +2631,7 @@ async function sendToJarvis(text) {
   try {
     const resp = await jfetch('/voice/chat', {
       method: 'POST',
-      body: JSON.stringify({ text, session_id: JARVIS_SESSION_ID })
+      body: JSON.stringify({ text, session_id: JARVIS_SESSION_ID, lat: window.JARVIS_LAT || null, lon: window.JARVIS_LON || null })
     });
 
     const thinkEl = document.getElementById(thinkId);
