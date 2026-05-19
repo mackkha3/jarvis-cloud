@@ -158,7 +158,21 @@ CALENDAR CREATION:
 To schedule an event, include an action tag anywhere in your response:
 <action>{{"type": "create_calendar_event", "title": "Event Name", "date": "YYYY-MM-DD", "time": "HH:MM", "duration_minutes": 60, "description": ""}}</action>
 Use 24-hour time (e.g. "14:30"). Infer the date from context — today's date is in the current time above.
-Omit "time" for all-day events."""
+Omit "time" for all-day events.
+
+GOOGLE TASKS:
+CREATE TASK — triggers: "add to my list", "add a task", "remind me to", "create a task", "put X on my list"
+→ Emit: <action>{{"type": "create_task", "title": "...", "due_date": "YYYY-MM-DD or null"}}</action>
+→ Confirm: "Added '[title]' to your task list."
+
+COMPLETE TASK — triggers: "I finished", "I completed", "I just did", "mark X as done", "cross off X", "done with X"
+→ Emit: <action>{{"type": "complete_task", "title": "..."}}</action>
+→ On success confirm: "Marked '[matched title]' as complete."
+→ If no matching task exists, log it instead: <action>{{"type": "log_accomplishment", "text": "..."}}</action>
+→ Confirm: "Logged it. No matching task found but I've noted '[text]'."
+
+QUERY TASKS — triggers: "what are my tasks", "what do I have to do", "what did I accomplish today", "show my tasks"
+→ Summarize verbally from the tasks context already provided — no action tag needed."""
 
         if context:
             base += f"\n\nCONTEXT FOR THIS REQUEST:\n{context}"
