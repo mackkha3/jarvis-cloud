@@ -454,6 +454,39 @@ def register_voice_chat_routes(app: Flask) -> None:
                             action_suffix = " Calendar write failed — check credentials."
                     else:
                         action_suffix = " Calendar not connected."
+
+                elif action_data.get("type") == "create_task":
+                    from app.integrations.google import GoogleTasks
+                    tasks_client = GoogleTasks()
+                    result = tasks_client.create_task(
+                        title=action_data.get("title", ""),
+                        due_date=action_data.get("due_date"),
+                    )
+                    if result.get("success"):
+                        action_suffix = " Added to your task list."
+                    else:
+                        action_suffix = f" Task creation failed: {result.get('error', 'unknown error')}."
+
+                elif action_data.get("type") == "complete_task":
+                    from app.integrations.google import GoogleTasks
+                    tasks_client = GoogleTasks()
+                    result = tasks_client.complete_task(action_data.get("title", ""))
+                    if result.get("success"):
+                        action_suffix = f" Marked '{result['title']}' as complete."
+                    elif result.get("error") == "no_match":
+                        tasks_client.log_accomplishment(action_data.get("title", ""))
+                        action_suffix = " No matching task found — logged it as a completed item."
+                    else:
+                        action_suffix = f" Couldn't mark that complete: {result.get('error', 'unknown')}."
+
+                elif action_data.get("type") == "log_accomplishment":
+                    from app.integrations.google import GoogleTasks
+                    tasks_client = GoogleTasks()
+                    result = tasks_client.log_accomplishment(action_data.get("text", ""))
+                    if result.get("success"):
+                        action_suffix = f" Logged at {result['time']}."
+                    else:
+                        action_suffix = " Couldn't log that."
             except Exception as _ae:
                 logger.warning("Action tag parse error: %s", _ae)
             # Strip action tag from spoken response

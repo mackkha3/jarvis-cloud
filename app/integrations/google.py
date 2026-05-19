@@ -288,32 +288,141 @@ class GoogleTasks:
             logger.error(f"Tasks fetch error: {e}")
             return []
 
-    def create_task(self, title: str, notes: str = "", due: str = "") -> Optional[dict]:
-        """Create a new task in the primary task list."""
+    def _primary_list_id(self) -> str:
+        """Return the ID of the first (primary) task list."""
+        lists = self.service.tasklists().list().execute()
+        return lists["items"][0]["id"]
+
+    def create_task(self, title: str, notes: str = "", due_date: str = None) -> dict:
+        """Create a new task in the primary task list.
+
+        Args:
+            title: Task title.
+            notes: Optional notes/description.
+            due_date: Optional due date in YYYY-MM-DD format.
+
+        Returns dict with success/error keys.
+        """
         if not self.available:
-            return None
+            return {"error": "Tasks not available"}
 
         try:
-            lists = self.service.tasklists().list().execute()
-            primary_list_id = lists["items"][0]["id"]
-
-            task_body = {"title": title}
+            tasklist_id = self._primary_list_id()
+            task_body: dict = {"title": title}
             if notes:
                 task_body["notes"] = notes
-            if due:
-                task_body["due"] = due
+            if due_date:
+                task_body["due"] = f"{due_date}T00:00:00.000Z"
 
             result = self.service.tasks().insert(
-                tasklist=primary_list_id,
+                tasklist=tasklist_id,
                 body=task_body,
             ).execute()
 
-            logger.info(f"Task created: '{title}'")
-            return result
+            logger.info("Task created: '%s'", title)
+            return {
+                "success": True,
+                "task_id": result.get("id"),
+                "title": title,
+                "due_date": due_date,
+            }
 
         except Exception as e:
-            logger.error(f"Task creation error: {e}")
-            return None
+            logger.error("Task creation error: %s", e)
+            return {"error": str(e)}
+
+    def complete_task(self, task_title: str) -> dict:
+        """Find and mark a task complete by fuzzy title match.
+
+        Uses Jaccard similarity on word sets — matches well even when the user
+        says "finished the report" and the task is titled "Quarterly report".
+
+        Returns dict with success/error keys.
+        """
+        if not self.available:
+            return {"error": "Tasks not available"}
+
+        try:
+            tasklist_id = self._primary_list_id()
+            raw = self.service.tasks().list(
+                tasklist=tasklist_id,
+                showCompleted=False,
+            ).execute()
+
+            items = raw.get("items", [])
+            if not items:
+                return {"error": "no_tasks", "message": "No pending tasks found"}
+
+            query_words = set(task_title.lower().split())
+            best_match = None
+            best_score = 0.0
+
+            for task in items:
+                task_words = set(task.get("title", "").lower().split())
+                overlap = len(task_words & query_words)
+                total = len(task_words | query_words)
+                score = overlap / total if total else 0.0
+                if score > best_score:
+                    best_score = score
+                    best_match = task
+
+            if not best_match or best_score < 0.2:
+                return {
+                    "error": "no_match",
+                    "message": f"No task matching '{task_title}' found",
+                    "available_tasks": [t.get("title") for t in items[:5]],
+                }
+
+            completed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            best_match["status"] = "completed"
+            best_match["completed"] = completed_at
+
+            self.service.tasks().update(
+                tasklist=tasklist_id,
+                task=best_match["id"],
+                body=best_match,
+            ).execute()
+
+            logger.info("Task completed: '%s' (score %.2f)", best_match.get("title"), best_score)
+            return {
+                "success": True,
+                "title": best_match.get("title"),
+                "completed_at": completed_at,
+            }
+
+        except Exception as e:
+            logger.error("Task complete error: %s", e)
+            return {"error": str(e)}
+
+    def log_accomplishment(self, text: str, timestamp: str = None) -> dict:
+        """Create a pre-completed task as a record for something done without a matching task.
+
+        Returns dict with success/error keys.
+        """
+        if not self.available:
+            return {"error": "Tasks not available"}
+
+        try:
+            ts = timestamp or datetime.now().strftime("%I:%M %p")
+            tasklist_id = self._primary_list_id()
+
+            task_body = {
+                "title": text,
+                "notes": f"Logged via JARVIS at {ts}",
+                "status": "completed",
+            }
+
+            self.service.tasks().insert(
+                tasklist=tasklist_id,
+                body=task_body,
+            ).execute()
+
+            logger.info("Accomplishment logged: '%s'", text)
+            return {"success": True, "logged": text, "time": ts}
+
+        except Exception as e:
+            logger.error("Accomplishment log error: %s", e)
+            return {"error": str(e)}
 
 
 class GoogleGmail:
