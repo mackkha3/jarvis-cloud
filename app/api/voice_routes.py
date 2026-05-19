@@ -10,14 +10,16 @@ POST /api/voice/conversation/clear — clear session history
 """
 
 import datetime
-import pytz
 import json
 import logging
 import pathlib
 import random
 import re
 import time
+import urllib.request
 import uuid
+
+import pytz
 
 from flask import Flask, jsonify, request, Response, send_file
 
@@ -30,6 +32,9 @@ _AUDIO_DIR = pathlib.Path("/tmp/jarvis_audio")
 # ====== SESSION STORE ======
 _sessions: dict = {}
 _CONTEXT_TTL = 120  # seconds — cache Google context per session
+
+# GPS location for this JARVIS instance — updated by POST /api/location
+_location_store: dict = {"lat": None, "lon": None}
 
 
 def _get_or_create_session(session_id: str) -> dict:
@@ -179,12 +184,65 @@ def _generate_audio(text: str, is_briefing: bool = False) -> str | None:
     return None
 
 
+# ====== WEATHER HELPER ======
+def get_weather(lat=None, lon=None, city=None):
+    """Fetch current conditions from OpenWeatherMap.
+
+    Returns (weather_text, location_name) or (None, None) on any failure.
+    Prefers lat/lon when available; falls back to city name or config coords.
+    """
+    from app.config import get_config
+    cfg = get_config()
+    api_key = cfg.openweather_api_key
+    if not api_key:
+        return None, None
+
+    try:
+        if lat is not None and lon is not None:
+            url = (f"https://api.openweathermap.org/data/2.5/weather"
+                   f"?lat={lat}&lon={lon}&appid={api_key}&units=imperial")
+        elif city:
+            url = (f"https://api.openweathermap.org/data/2.5/weather"
+                   f"?q={city}&appid={api_key}&units=imperial")
+        elif cfg.location_lat and cfg.location_lon:
+            url = (f"https://api.openweathermap.org/data/2.5/weather"
+                   f"?lat={cfg.location_lat}&lon={cfg.location_lon}&appid={api_key}&units=imperial")
+        else:
+            return None, None
+
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read())
+
+        location_name = data.get("name") or city or cfg.location_city or ""
+        temp = data["main"]["temp"]
+        desc = data["weather"][0]["description"]
+        humidity = data["main"]["humidity"]
+        return f"{temp:.0f}°F, {desc}, humidity {humidity}%", location_name
+
+    except Exception as exc:
+        logger.warning("Weather fetch failed: %s", exc)
+        return None, None
+
+
 # ====== CONTEXT HELPER ======
 def _get_jarvis_context() -> str:
     try:
+        from app.config import get_config
         from app.integrations.google import GoogleCalendar, GoogleTasks, GoogleGmail
+        cfg = get_config()
         now = datetime.datetime.now(pytz.timezone("America/Chicago"))
         parts = [f"Current time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}"]
+
+        # Weather — use GPS coords if available, fall back to config city
+        lat = _location_store.get("lat")
+        lon = _location_store.get("lon")
+        weather_text, location_name = get_weather(
+            lat=lat, lon=lon, city=cfg.location_city or None
+        )
+        if location_name:
+            parts.append(f"User location: {location_name}")
+        if weather_text:
+            parts.append(f"Current weather: {weather_text}")
 
         cal = GoogleCalendar()
         if cal.available:
@@ -291,6 +349,23 @@ def register_voice_routes(app: Flask) -> None:
 def register_voice_chat_routes(app: Flask) -> None:
     """Register closed-loop conversation and audio-serving routes."""
 
+    @app.route("/api/location", methods=["POST"])
+    @require_api_key
+    def set_location():
+        """Store GPS coordinates from the browser. Expires all context caches so the
+        next voice/chat request re-fetches weather with the actual GPS position."""
+        data = request.get_json(silent=True) or {}
+        lat = data.get("lat")
+        lon = data.get("lon")
+        if lat is not None and lon is not None:
+            _location_store["lat"] = float(lat)
+            _location_store["lon"] = float(lon)
+            # Expire cached context so next chat request includes GPS-based weather
+            for s in _sessions.values():
+                s["context_ts"] = 0
+            logger.info("GPS location updated: %.4f, %.4f", lat, lon)
+        return jsonify({"status": "ok"})
+
     @app.route("/api/voice/chat", methods=["POST"])
     @require_api_key
     def voice_chat():
@@ -302,6 +377,14 @@ def register_voice_chat_routes(app: Flask) -> None:
         user_text = data.get("text", "").strip()
         session_id = data.get("session_id", "default")
         is_greeting = data.get("greeting", False)
+
+        # Accept lat/lon in body as a fallback update (e.g. if /api/location fired first)
+        body_lat = data.get("lat")
+        body_lon = data.get("lon")
+        if body_lat is not None and body_lon is not None and _location_store["lat"] is None:
+            _location_store["lat"] = float(body_lat)
+            _location_store["lon"] = float(body_lon)
+            logger.info("GPS location set from chat body: %.4f, %.4f", body_lat, body_lon)
 
         session = _get_or_create_session(session_id)
 
