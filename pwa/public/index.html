@@ -728,7 +728,7 @@
     .pill .pulse{ width:5px; height:5px; }
 
     /* ── Main: single column — Voice first, Left, Right ─────────── */
-    .main{ display:flex; flex-direction:column; gap:8px; }
+    .main{ display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box; overflow-x:hidden; }
     .col.center{ order:1; }
     .col.left  { order:2; }
     .col.right { order:3; }
@@ -2004,8 +2004,8 @@ async function loadLog() {
   panelLoading(logEl);
   try {
     var results = await Promise.allSettled([
-      jfetch("/logs/recent?source=triage&lines=20"),
-      jfetch("/logs/recent?source=briefings&lines=20"),
+      Promise.resolve({logs:[]}),
+      Promise.resolve({logs:[]}),
     ]);
     var lines = [].concat(
       results[0].status === "fulfilled" ? (results[0].value.lines || []).slice(-3) : [],
