@@ -2484,8 +2484,11 @@ function unlockIOSAudio() {
 }
 
 let _toggleLock = false;
+let _toggleCount = 0;
 async function toggleListening() {
-  if (_toggleLock) return;
+  _toggleCount++;
+  console.log('[JARVIS] toggleListening called #' + _toggleCount + ' lock=' + _toggleLock);
+  if (_toggleLock) { console.log('[JARVIS] BLOCKED by lock'); return; }
   _toggleLock = true;
   setTimeout(() => { _toggleLock = false; }, 2000);
   const now = Date.now();
