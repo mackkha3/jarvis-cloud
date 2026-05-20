@@ -2250,19 +2250,19 @@ function _voiceStateInfo(state, running) {
 }
 
 // ── Panel: Voice Interface — animated orb ─────────────────────────
+let _loadVoiceInProgress = false;
 async function loadVoice() {
-  // Don't rebuild panel if session just ended (within 3 seconds)
+  // Don't rebuild panel if session is active
   if (jarvisSessionActive || jarvisListening || jarvisProcessing) return;
-  if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;
+  // Reactor already injected — skip entirely
+  if (document.getElementById("voice-orb")) return;
+  // Serialize concurrent calls — only one injection at a time
+  if (_loadVoiceInProgress) return;
+  _loadVoiceInProgress = true;
+
   var body = document.getElementById("voice-body");
   var meta = document.getElementById("voice-meta");
-  if (!body) return;
-  
-  // Don't reinject reactor HTML if already built — prevents double-click on reinject
-  if (document.getElementById("voice-orb") && !jarvisSessionActive) {
-    // Just update status text without rebuilding HTML
-    return;
-  }
+  if (!body) { _loadVoiceInProgress = false; return; }
 
   var running = false, state = "offline";
   var lastQuery = "", lastResponse = "";
@@ -2319,6 +2319,7 @@ async function loadVoice() {
     '</div>';
 
   panelLoaded(body, html);
+  _loadVoiceInProgress = false;
   // Suppress animations during initial paint — prevent amber→cyan flicker on first load
   var _initOrb = document.getElementById('voice-orb');
   if (_initOrb) {
@@ -2440,7 +2441,7 @@ async function saveSchedule(job) {
 async function loadAll() {
   await Promise.allSettled([
     loadBrief(), loadEvents(), loadSystemStatus(),
-    loadChart(), loadLog(),    loadTriage(), loadTasks(), loadVoice(),
+    loadChart(), loadLog(),    loadTriage(), loadTasks(),
     loadTTSMode(),
   ]);
 }
