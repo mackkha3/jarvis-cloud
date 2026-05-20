@@ -2510,6 +2510,38 @@ async function toggleListening() {
 }
 
 // ── SESSION START ─────────────────────────────────────────
+function generateLocalGreeting() {
+  const hour = new Date().getHours();
+  const greetings = {
+    morning: [
+      "Good morning, Boss. Systems online. What do you need?",
+      "Good morning. Ready when you are.",
+      "Morning, Boss. All systems nominal.",
+    ],
+    afternoon: [
+      "Good afternoon, Boss. What can I do for you?",
+      "Afternoon. Ready.",
+      "Good afternoon. How can I help?",
+    ],
+    evening: [
+      "Good evening, Boss. What do you need?",
+      "Evening. At your service.",
+      "Good evening. Ready.",
+    ],
+    night: [
+      "Still up, Boss? What do you need?",
+      "Working late. How can I help?",
+      "Night shift. Ready.",
+    ]
+  };
+  let pool;
+  if (hour >= 5 && hour < 12)       pool = greetings.morning;
+  else if (hour >= 12 && hour < 17) pool = greetings.afternoon;
+  else if (hour >= 17 && hour < 21) pool = greetings.evening;
+  else                               pool = greetings.night;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 async function startJarvisSession() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -2524,7 +2556,9 @@ async function startJarvisSession() {
   jarvisRecognition.lang = 'en-US';
   jarvisRecognition.maxAlternatives = 1;
 
-  jarvisRecognition.onresult = async (event) => {
+  jarvisRecognition.onresult = jarvisOnResult;
+
+async function jarvisOnResult(event) {
     if (jarvisProcessing) return;
     if (Date.now() < jarvisSpeakingUntil) return; // JARVIS still speaking — discard
 
@@ -2564,14 +2598,18 @@ async function startJarvisSession() {
     }
   };
 
-  jarvisRecognition.onerror = (e) => {
+  jarvisRecognition.onerror = jarvisOnError;
+
+function jarvisOnError(e) {
     if (e.error === 'no-speech') return; // ignore silence
     if (e.error === 'aborted') return;   // we aborted it intentionally
     showToast('Mic error: ' + e.error);
     resetVoiceState();
   };
 
-  jarvisRecognition.onend = () => {
+  jarvisRecognition.onend = jarvisOnEnd;
+
+function jarvisOnEnd() {
     // Continuous recognition stopped unexpectedly — restart if session still active
     if (jarvisSessionActive && !jarvisProcessing) {
       try { jarvisRecognition.start(); } catch(e) {}
@@ -2601,16 +2639,32 @@ async function startJarvisSession() {
     });
     appendVoiceLog('JARVIS', resp.response);
     window._lastJarvisResponse = resp.response;
+
     // Stop mic before greeting plays — prevent feedback loop
     if (jarvisRecognition) {
       try { jarvisRecognition.stop(); } catch(e) {}
     }
-    // Unlock speech synthesis here — still within user gesture, not pre-consumed by silent utterance
     if (window.speechSynthesis) window.speechSynthesis.cancel();
+
     await playAudioThen(resp.audio_url, resp.response, () => {
       jarvisListening = true;
       setVoiceState('listening');
-      restartRecognition();
+      // Create fresh recognition instance after greeting
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR && jarvisSessionActive) {
+        jarvisRecognition = new SR();
+        jarvisRecognition.continuous = true;
+        jarvisRecognition.interimResults = false;
+        jarvisRecognition.lang = 'en-US';
+        jarvisRecognition.maxAlternatives = 1;
+        jarvisRecognition.onresult = jarvisOnResult;
+        jarvisRecognition.onerror = jarvisOnError;
+        jarvisRecognition.onend = jarvisOnEnd;
+        try {
+          jarvisRecognition.start();
+          startRecognitionWatchdog();
+        } catch(e) {}
+      }
     });
   } catch(e) {
     resetVoiceState();
@@ -2780,8 +2834,10 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
       browserTTSThen(fallbackText, safeFinish);
     };
 
-    // Safety timeout — if audio hangs, force completion
-    setTimeout(() => safeFinish(), 30000);
+    // Safety timeout — word-count estimate so a 10-word greeting times out in ~8s, not 30s
+    const wordCount = fallbackText ? fallbackText.split(' ').length : 10;
+    const estimatedMs = (wordCount * 600) + 2000;
+    setTimeout(() => safeFinish(), estimatedMs);
 
     try {
       await audio.play();
