@@ -2257,6 +2257,12 @@ async function loadVoice() {
   var body = document.getElementById("voice-body");
   var meta = document.getElementById("voice-meta");
   if (!body) return;
+  
+  // Don't reinject reactor HTML if already built — prevents double-click on reinject
+  if (document.getElementById("voice-orb") && !jarvisSessionActive) {
+    // Just update status text without rebuilding HTML
+    return;
+  }
 
   var running = false, state = "offline";
   var lastQuery = "", lastResponse = "";
