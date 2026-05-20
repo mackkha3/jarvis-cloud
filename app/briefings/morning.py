@@ -90,6 +90,23 @@ def _format_emails_for_context(emails: list[dict], unread_count: int) -> str:
     return "\n".join(lines)
 
 
+def _build_plain_briefing(cfg, now: datetime, events: list, tasks: list, unread_count: int) -> str:
+    """Fallback briefing assembled from raw data when Claude is unavailable."""
+    hour = now.hour
+    greeting = "morning" if hour < 12 else "afternoon" if hour < 17 else "evening"
+    parts = [f"Good {greeting}, {cfg.owner_title}."]
+    if events:
+        parts.append(f"You have {len(events)} calendar event{'s' if len(events) != 1 else ''} today.")
+    else:
+        parts.append("Your calendar is clear today.")
+    if tasks:
+        titles = ", ".join(t.get("title", "") for t in tasks[:3] if t.get("title"))
+        parts.append(f"Pending: {titles}.")
+    if unread_count:
+        parts.append(f"{unread_count} unread email{'s' if unread_count != 1 else ''} in your inbox.")
+    return " ".join(parts)
+
+
 def generate_morning_briefing(
     include_weather: bool = True,
 ) -> dict:
@@ -180,14 +197,17 @@ Do NOT use bullet points for the opening or closing. Use them only for the sched
 Do NOT start with 'Good morning' if it's after noon."""
 
     # ---- Call Claude (always Sonnet for briefings — quality matters here) ----
-    ai = JarvisAI()
-    result = ai.respond(
-        query=prompt,
-        context=context,
-        force_layer=3,
-    )
-
-    briefing_text = result.get("response", "Briefing generation failed.")
+    briefing_text = ""
+    try:
+        ai = JarvisAI()
+        result = ai.respond(query=prompt, context=context, force_layer=3)
+        briefing_text = result.get("response", "")
+        if result.get("error") or not briefing_text.strip():
+            raise RuntimeError(f"Claude returned error: {result.get('error', 'empty response')}")
+    except Exception as e:
+        logger.error("Claude briefing synthesis failed: %s", e)
+        errors.append("ai_unavailable")
+        briefing_text = _build_plain_briefing(cfg, now, events, tasks, unread_count)
 
     logger.info(
         f"Morning briefing generated — "

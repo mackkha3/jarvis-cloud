@@ -1588,22 +1588,40 @@
   function pad(n){return n.toString().padStart(2,'0')}
   function tick(){
     const now = new Date();
-    // Force the clock view to be local-ish; show CT as "now" for the demo
-    const h = pad(now.getHours()), m = pad(now.getMinutes()), s = pad(now.getSeconds());
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // Main clock — explicit local timezone via Intl (avoids UTC display on devices set to UTC)
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false, timeZone: localTz
+    });
+    const [lh, lm, ls] = timeStr.split(':');
     const clk = document.getElementById('clock');
-    if(clk) clk.innerHTML = `${h}:${m}<span class="sec">:${s}</span>`;
-    // multi-zone clocks
-    const ct = new Date(now.getTime());
-    const utc = new Date(now.getTime() + (now.getTimezoneOffset()*60000));
-    const jst = new Date(utc.getTime() + 9*3600*1000);
-    document.getElementById('clk-ct').textContent  = `${pad(ct.getHours())}:${pad(ct.getMinutes())}`;
-    document.getElementById('clk-utc').textContent = `${pad(utc.getHours())}:${pad(utc.getMinutes())}`;
-    document.getElementById('clk-jst').textContent = `${pad(jst.getHours())}:${pad(jst.getMinutes())}`;
-    // date tag
-    const days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
-    const months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    if(clk) clk.innerHTML = `${lh}:${lm}<span class="sec">:${ls}</span>`;
+
+    // Multi-zone clocks — named IANA timezones, no manual offset math
+    const fmtZone = (tz) => now.toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz
+    });
+    const ctEl  = document.getElementById('clk-ct');
+    const utcEl = document.getElementById('clk-utc');
+    const jstEl = document.getElementById('clk-jst');
+    if(ctEl)  ctEl.textContent  = fmtZone('America/Chicago');
+    if(utcEl) utcEl.textContent = fmtZone('UTC');
+    if(jstEl) jstEl.textContent = fmtZone('Asia/Tokyo');
+
+    // Date tag — local date from Intl so it's correct even on UTC-timezone devices
+    const dateParts = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', timeZone: localTz
+    }).formatToParts(now).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+    const DAYS   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+    const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const WD_MAP = {sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6};
+    const MO_MAP = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    const dayIdx = WD_MAP[(dateParts.weekday||'').toLowerCase()] ?? now.getDay();
+    const monIdx = MO_MAP[(dateParts.month||'').toLowerCase().slice(0,3)] ?? now.getMonth();
     const dt = document.getElementById('date-tag');
-    if(dt) dt.textContent = `${days[now.getDay()]} · ${months[now.getMonth()]} ${pad(now.getDate())} · ${now.getFullYear()}`;
+    if(dt) dt.textContent = `${DAYS[dayIdx]} · ${MONTHS[monIdx]} ${pad(parseInt(dateParts.day||now.getDate()))} · ${dateParts.year||now.getFullYear()}`;
   }
   tick(); setInterval(tick, 1000);
 
@@ -1844,13 +1862,19 @@ function panelLoaded(el, html) {
 }
 
 // ── Panel: Today's Tactical Overview (morning-brief) ─────────────
+var _briefRetried = false;
 async function loadBrief() {
   var body = document.getElementById("brief-body");
   if (!body) return;
   panelLoading(body);
   try {
     var d = await jfetch("/briefings/morning");
-    if (d.error) { offline(body, "/morning-brief"); return; }
+    // Partial API errors (calendar/gmail down) don't abort — briefing text may still be valid
+    if (d.error && !d.briefing_text) {
+      throw new Error(d.error);
+    }
+    if (d.error) console.warn("[JARVIS] Brief partial data missing:", d.error);
+    _briefRetried = false;
     var tasks = Array.isArray(d.open_tasks) ? d.open_tasks : [];
     var html  = "";
     if (d.briefing_text)
@@ -1877,7 +1901,30 @@ async function loadBrief() {
       var ts = d.timestamp.toString().replace(/^(\d{4}-\d{2}-\d{2})\s+/, "");
       meta.textContent = "GENERATED " + ts;
     }
-  } catch(e) { offline(body, "/morning-brief"); }
+  } catch(e) {
+    console.error("[JARVIS] Morning brief error:", e && (e.message || e));
+    if (!_briefRetried) {
+      _briefRetried = true;
+      var ov = body.querySelector('.p-overlay');
+      if (ov) ov.parentNode.removeChild(ov);
+      body.innerHTML = '<div style="color:var(--muted);text-align:center;padding:16px 0;font-size:10px;letter-spacing:.12em">GENERATING BRIEFING...</div>';
+      setTimeout(loadBrief, 3000);
+      return;
+    }
+    _briefRetried = false;
+    offline(body, "/morning-brief");
+  }
+}
+
+// ── Deduplicate recurring events — keep first (next) occurrence per title ─
+function deduplicateEvents(events) {
+  var seen = Object.create(null);
+  return events.filter(function(ev) {
+    var title = ((ev.summary || ev.title || '').trim()).toLowerCase();
+    if (!title || seen[title]) return false;
+    seen[title] = true;
+    return true;
+  });
 }
 
 // ── Panel: Upcoming Events (calendar/upcoming) ────────────────────
@@ -1888,14 +1935,14 @@ async function loadEvents() {
   panelLoading(body);
   try {
     var d   = await jfetch("/calendar/upcoming");
-    var evs = d.events || [];
+    var evs = deduplicateEvents(d.events || []).slice(0, 6);
     if (meta) meta.textContent = "GOOGLE · " + evs.length + " NEXT";
     if (!evs.length) {
       panelLoaded(body, '<div class="nominal"><span><span class="pulse" style="display:inline-block;margin-right:8px"></span>CALENDAR CLEAR — NO UPCOMING EVENTS</span></div>');
       return;
     }
     var now  = new Date();
-    var html = evs.slice(0, 5).map(function(ev) {
+    var html = evs.map(function(ev) {
       var s    = ev.start ? new Date(ev.start) : null;
       var e    = ev.end   ? new Date(ev.end)   : null;
       var ts   = s && !isNaN(s) ? pad(s.getHours()) + ":" + pad(s.getMinutes()) : "TBD";
