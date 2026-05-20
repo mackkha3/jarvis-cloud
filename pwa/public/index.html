@@ -2646,7 +2646,7 @@ function jarvisOnEnd() {
     }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
 
-    await playAudioThen(resp.audio_url, resp.response, () => {
+    await playAudioThen(null, resp.response, () => {  // greeting always uses browser TTS — reliable onComplete
       jarvisListening = true;
       setVoiceState('listening');
       // Create fresh recognition instance after greeting
