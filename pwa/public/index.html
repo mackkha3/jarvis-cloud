@@ -2483,7 +2483,11 @@ function unlockIOSAudio() {
   }
 }
 
+let _toggleLock = false;
 async function toggleListening() {
+  if (_toggleLock) return;
+  _toggleLock = true;
+  setTimeout(() => { _toggleLock = false; }, 2000);
   const now = Date.now();
   if (now - _lastTap < 2000) return;
   _lastTap = now;
