@@ -2878,7 +2878,8 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
 }
 
 function browserTTSThen(text, onComplete) {
-  const finish = () => { if (onComplete) onComplete(); };
+  let _done = false;
+  const finish = () => { if (!_done && onComplete) { _done = true; onComplete(); } };
   if (!window.speechSynthesis) { finish(); return; }
 
   window.speechSynthesis.cancel();
