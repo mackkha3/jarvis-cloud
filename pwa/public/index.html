@@ -1759,6 +1759,7 @@ function initLocation() {
 
 // ── Voice state poller — updates reactor class every 2s without rebuilding panel ─
 async function checkMeetingPrep() {
+  if (jarvisSessionActive || jarvisProcessing) return;
   if (!JARVIS_KEY) return;
   try {
     var data = await jfetch('/meeting-prep/pending');
