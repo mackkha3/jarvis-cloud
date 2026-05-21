@@ -2490,14 +2490,7 @@ function unlockIOSAudio() {
   }
 }
 
-let _toggleLock = false;
-let _toggleCount = 0;
 async function toggleListening() {
-  _toggleCount++;
-  console.log('[JARVIS] toggleListening called #' + _toggleCount + ' lock=' + _toggleLock);
-  if (_toggleLock) { console.log('[JARVIS] BLOCKED by lock'); return; }
-  _toggleLock = true;
-  setTimeout(() => { _toggleLock = false; }, 2000);
   const now = Date.now();
   if (now - _lastTap < 2000) return;
   _lastTap = now;
@@ -2630,54 +2623,43 @@ function jarvisOnEnd() {
     }
   };
 
-  jarvisSessionActive = true;
   jarvisListening = true;
-  setVoiceState('listening');
-
-  // Start recognition
-  try {
-    jarvisRecognition.start();
-    startRecognitionWatchdog();
-  } catch(e) {
-    showToast('Could not start mic: ' + e.message);
-    resetVoiceState();
-    return;
-  }
-
-  // Get greeting from server
   setVoiceState('processing');
+
+  // Get greeting from server — set session active only after we have a response
   try {
     const resp = await jfetch('/voice/chat', {
       method: 'POST',
       body: JSON.stringify({ greeting: true, session_id: JARVIS_SESSION_ID, lat: window.JARVIS_LAT || null, lon: window.JARVIS_LON || null })
     });
+
+    jarvisSessionActive = true;
+
+    // Start recognition inside user-gesture context, before audio plays
+    try {
+      jarvisRecognition.start();
+      startRecognitionWatchdog();
+    } catch(e) {
+      showToast('Could not start mic: ' + e.message);
+      resetVoiceState();
+      return;
+    }
+
     appendVoiceLog('JARVIS', resp.response);
     window._lastJarvisResponse = resp.response;
 
     // Stop mic before greeting plays — prevent feedback loop
-    if (jarvisRecognition) {
-      try { jarvisRecognition.stop(); } catch(e) {}
-    }
+    try { jarvisRecognition.stop(); } catch(e) {}
     if (window.speechSynthesis) window.speechSynthesis.cancel();
 
-    await playAudioThen(null, resp.response, () => {  // greeting always uses browser TTS — reliable onComplete
+    await playAudioThen(null, resp.response, () => {
       jarvisListening = true;
       setVoiceState('listening');
-      // Create fresh recognition instance after greeting
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SR && jarvisSessionActive) {
-        jarvisRecognition = new SR();
-        jarvisRecognition.continuous = true;
-        jarvisRecognition.interimResults = false;
-        jarvisRecognition.lang = 'en-US';
-        jarvisRecognition.maxAlternatives = 1;
-        jarvisRecognition.onresult = jarvisOnResult;
-        jarvisRecognition.onerror = jarvisOnError;
-        jarvisRecognition.onend = jarvisOnEnd;
-        try {
-          jarvisRecognition.start();
-          startRecognitionWatchdog();
-        } catch(e) {}
+      try {
+        jarvisRecognition.start();
+        startRecognitionWatchdog();
+      } catch(e) {
+        // Already started or invalid state — watchdog will recover
       }
     });
   } catch(e) {
