@@ -390,6 +390,14 @@ def register_voice_chat_routes(app: Flask) -> None:
 
         # ── CASE 1: First tap — return greeting, no Claude call needed ──
         if is_greeting or (not user_text and not session["greeting_done"]):
+            # Server-side dedup: ignore duplicate greeting within 3 seconds
+            import time
+            now = time.time()
+            last_greeting = session.get("last_greeting_ts", 0)
+            if now - last_greeting < 3.0:
+                # Duplicate greeting request — return same response silently
+                return jsonify({"response": "", "audio_url": None, "layer": 0})
+            session["last_greeting_ts"] = now
             greeting_text = _generate_greeting(session, cfg)
             session["greeting_done"] = True
             session["last_active"] = time.time()
