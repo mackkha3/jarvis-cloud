@@ -23,6 +23,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
   // API calls: network-first, fall back to a minimal offline JSON
+  // Never intercept POST requests — let them go directly to server
+  if (e.request.method === 'POST') { return; }
   if (url.pathname.startsWith('/api/')) {
     e.respondWith(
       fetch(e.request).catch(() =>
