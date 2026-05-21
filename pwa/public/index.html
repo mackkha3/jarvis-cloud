@@ -1735,6 +1735,7 @@ function startDashboard() {
   setInterval(loadAll, 60000);
   setTimeout(function(){ setInterval(pollVoiceState, 2000); }, 3000);
   setTimeout(initLocation, 2000);
+  setInterval(checkMeetingPrep, 30000);
 }
 
 // ── GPS Location ──────────────────────────────────────────────────
@@ -1757,6 +1758,33 @@ function initLocation() {
 }
 
 // ── Voice state poller — updates reactor class every 2s without rebuilding panel ─
+async function checkMeetingPrep() {
+  if (!JARVIS_KEY) return;
+  try {
+    var data = await jfetch('/meeting-prep/pending');
+    if (data.type === 'meeting_prep') {
+      appendVoiceLog('JARVIS', data.text);
+      showToast('Meeting prep: ' + data.meeting + ' in ' + data.minutes_away + ' min');
+      if (data.audio_url) {
+        var audio = new Audio(data.audio_url);
+        audio.play().catch(function() {
+          if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+            var u = new SpeechSynthesisUtterance(data.text);
+            u.rate = 0.88; u.pitch = 0.75;
+            window.speechSynthesis.speak(u);
+          }
+        });
+      } else if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        var u = new SpeechSynthesisUtterance(data.text);
+        u.rate = 0.88; u.pitch = 0.75;
+        window.speechSynthesis.speak(u);
+      }
+    }
+  } catch(e) {}
+}
+
 function pollVoiceState() {
   if (!JARVIS_KEY) return;
   if (jarvisListening || jarvisRecognition || jarvisSessionActive || jarvisProcessing) return;

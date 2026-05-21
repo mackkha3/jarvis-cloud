@@ -495,6 +495,20 @@ def register_voice_chat_routes(app: Flask) -> None:
                         action_suffix = f" Logged at {result['time']}."
                     else:
                         action_suffix = " Couldn't log that."
+
+                elif action_data.get("type") == "schedule_meeting_prep":
+                    from app.briefings.meeting_prep import queue_meeting_prep
+                    prep_event = {
+                        "summary": action_data.get("event_title", "Meeting"),
+                        "start_dt": action_data.get("start_dt", ""),
+                        "start_time": "",
+                        "location": "",
+                        "description": "",
+                        "attendees": [],
+                    }
+                    queue_meeting_prep(prep_event)
+                    action_suffix = " I'll have a briefing ready for you before the meeting."
+
             except Exception as _ae:
                 logger.warning("Action tag parse error: %s", _ae)
             # Strip action tag from spoken response
@@ -525,6 +539,17 @@ def register_voice_chat_routes(app: Flask) -> None:
             "layer": result.get("layer"),
             "tokens": result.get("tokens", {}),
         })
+
+    @app.route("/api/meeting-prep/pending", methods=["GET"])
+    @require_api_key
+    def get_pending_meeting_prep():
+        from app.briefings.meeting_prep import get_pending_briefing
+        briefing = get_pending_briefing()
+        if briefing:
+            audio_url = _generate_audio(briefing["text"], is_briefing=True)
+            briefing["audio_url"] = audio_url
+            return jsonify(briefing)
+        return jsonify({"type": None})
 
     @app.route("/api/voice/audio/<filename>", methods=["GET"])
     def voice_audio(filename):

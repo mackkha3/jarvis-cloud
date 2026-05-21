@@ -109,6 +109,13 @@ def create_app() -> Flask:
     except Exception as _voice_exc:
         logger.warning("Kokoro daemon start failed (non-fatal): %s", _voice_exc)
 
+    # ====== MEETING PREP SCHEDULER ======
+    try:
+        from app.briefings.meeting_prep import start_meeting_prep_scheduler
+        start_meeting_prep_scheduler()
+    except Exception as _mp_exc:
+        logger.warning("Meeting prep scheduler start failed (non-fatal): %s", _mp_exc)
+
     # ====== STARTUP LOG ======
     logger.info("=" * 60)
     logger.info("JARVIS Cloud — Flask API initialized")

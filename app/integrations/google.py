@@ -33,6 +33,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/tasks",
     "https://www.googleapis.com/auth/tasks.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 
@@ -500,6 +501,127 @@ class GoogleGmail:
         except Exception as e:
             logger.error(f"Gmail fetch error: {e}")
             return []
+
+    def search_emails(self, query: str, max_results: int = 5) -> list[dict]:
+        """Search emails by keyword (sender name, subject, etc.)."""
+        if not self.available:
+            return []
+        try:
+            result = self.service.users().messages().list(
+                userId="me",
+                q=query,
+                maxResults=max_results,
+            ).execute()
+            messages = result.get("messages", [])
+            emails = []
+            for msg in messages[:max_results]:
+                detail = self.service.users().messages().get(
+                    userId="me",
+                    id=msg["id"],
+                    format="metadata",
+                    metadataHeaders=["From", "Subject", "Date"],
+                ).execute()
+                headers = {
+                    h["name"]: h["value"]
+                    for h in detail.get("payload", {}).get("headers", [])
+                }
+                emails.append({
+                    "id": msg["id"],
+                    "from": headers.get("From", ""),
+                    "subject": headers.get("Subject", ""),
+                    "date": headers.get("Date", ""),
+                    "snippet": detail.get("snippet", "")[:200],
+                })
+            logger.info(f"Gmail search '{query}': {len(emails)} results")
+            return emails
+        except Exception as e:
+            logger.error(f"Gmail search error: {e}")
+            return []
+
+
+class GoogleDrive:
+    """Read-only interface for Google Drive — file search and content export."""
+
+    def __init__(self):
+        self.service = None
+        self.available = False
+        try:
+            creds = _load_credentials()
+            if creds:
+                self.service = build("drive", "v3", credentials=creds)
+                self.available = True
+                logger.info("Google Drive connected")
+            else:
+                logger.warning("Google Drive unavailable — no valid credentials")
+        except Exception as e:
+            logger.error(f"Google Drive connection error: {e}")
+
+    def search_files(self, query: str, max_results: int = 5) -> list[dict]:
+        """Search Drive files by keyword."""
+        if not self.available:
+            return []
+        try:
+            safe_query = query.replace("'", "\\'")
+            results = self.service.files().list(
+                q=f"fullText contains '{safe_query}' and trashed=false",
+                pageSize=max_results,
+                fields="files(id, name, mimeType, modifiedTime, webViewLink)",
+            ).execute()
+            return results.get("files", [])
+        except Exception as e:
+            logger.error(f"Drive search error: {e}")
+            return []
+
+    def read_file(self, file_id: str, mime_type: str) -> str:
+        """Read file content — supports Docs, Sheets, and plain text."""
+        if not self.available:
+            return ""
+        try:
+            if "document" in mime_type:
+                content = self.service.files().export(
+                    fileId=file_id,
+                    mimeType="text/plain",
+                ).execute()
+                return content.decode("utf-8")[:3000]
+            elif "spreadsheet" in mime_type:
+                content = self.service.files().export(
+                    fileId=file_id,
+                    mimeType="text/csv",
+                ).execute()
+                return content.decode("utf-8")[:2000]
+            else:
+                content = self.service.files().get_media(fileId=file_id).execute()
+                if isinstance(content, bytes):
+                    return content.decode("utf-8", errors="ignore")[:2000]
+                return str(content)[:2000]
+        except Exception as e:
+            logger.error(f"Drive read error: {e}")
+            return ""
+
+    def get_meeting_context(self, meeting_title: str, attendee_names: list) -> str:
+        """Search Drive for files related to a meeting and its attendees."""
+        context_parts = []
+        seen_names: set = set()
+
+        keywords = [w for w in meeting_title.split() if len(w) > 3]
+        for keyword in keywords[:2]:
+            for f in self.search_files(keyword, max_results=3):
+                content = self.read_file(f["id"], f["mimeType"])
+                if content:
+                    context_parts.append(f"Document '{f['name']}': {content[:500]}")
+                    seen_names.add(f["name"])
+
+        for name in attendee_names[:2]:
+            for f in self.search_files(name, max_results=2):
+                if f["name"] not in seen_names:
+                    content = self.read_file(f["id"], f["mimeType"])
+                    if content:
+                        context_parts.append(
+                            f"Document '{f['name']}' (related to {name}): {content[:300]}"
+                        )
+                        seen_names.add(f["name"])
+
+        return "\n\n".join(context_parts[:4])
 
 
 def get_jarvis_context() -> str:
