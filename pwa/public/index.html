@@ -2973,7 +2973,7 @@ function appendVoiceLog(speaker, text, id) {
 // ====== END VOICE CONVERSATION ======
 </script>
 <script>
-if ('serviceWorker' in navigator) {
+if (false && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/pwa/sw.js', { scope: '/' })
       .catch(err => console.warn('SW registration failed:', err));
