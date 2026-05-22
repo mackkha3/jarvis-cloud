@@ -2580,6 +2580,58 @@ function generateLocalGreeting() {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// ── Recognition event handlers — module-level so they bind exactly once ──
+async function jarvisOnResult(event) {
+  if (jarvisProcessing) return;
+  if (Date.now() < jarvisSpeakingUntil) return;
+
+  const text = event.results[event.results.length - 1][0].transcript.trim();
+  if (!text) return;
+
+  const lowerText = text.toLowerCase();
+  const DISMISSAL_WORDS = ['thank you jarvis', 'thanks jarvis', 'ok jarvis', 'okay jarvis',
+    'that will be all', "that's all", 'stand down', 'goodbye jarvis', 'bye jarvis',
+    'stop jarvis', 'jarvis stop', 'dismiss'];
+
+  if (DISMISSAL_WORDS.some(phrase => lowerText.includes(phrase))) {
+    endSession();
+    setTimeout(() => {
+      window.speechSynthesis.cancel();
+      const variants = [
+        "Understood. Standing by.",
+        "Of course. I'll be here when you need me.",
+        "Right. Standing down.",
+        "Noted. Have a good one.",
+      ];
+      const msg = variants[Math.floor(Math.random() * variants.length)];
+      const u = new SpeechSynthesisUtterance(msg);
+      u.rate = 0.88; u.pitch = 0.75;
+      u.onend = () => setVoiceState('idle');
+      window.speechSynthesis.speak(u);
+      setVoiceState('idle');
+    }, 200);
+    return;
+  }
+
+  if (!jarvisProcessing && _voiceQueue.length === 0) {
+    _voiceQueue.push(text);
+    processVoiceQueue();
+  }
+}
+
+function jarvisOnError(e) {
+  if (e.error === 'no-speech') return;
+  if (e.error === 'aborted') return;
+  showToast('Mic error: ' + e.error);
+  resetVoiceState();
+}
+
+function jarvisOnEnd() {
+  if (jarvisSessionActive && !jarvisProcessing) {
+    try { jarvisRecognition.start(); } catch(e) {}
+  }
+}
+
 async function startJarvisSession() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -2587,7 +2639,6 @@ async function startJarvisSession() {
     return;
   }
 
-  // Start continuous recognition FIRST (inside user gesture context)
   jarvisRecognition = new SpeechRecognition();
   jarvisRecognition.continuous = true;
   jarvisRecognition.interimResults = false;
@@ -2595,64 +2646,8 @@ async function startJarvisSession() {
   jarvisRecognition.maxAlternatives = 1;
 
   jarvisRecognition.onresult = jarvisOnResult;
-
-async function jarvisOnResult(event) {
-    if (jarvisProcessing) return;
-    if (Date.now() < jarvisSpeakingUntil) return; // JARVIS still speaking — discard
-
-    const text = event.results[event.results.length - 1][0].transcript.trim();
-    if (!text) return;
-
-    // Client-side dismissal — end session without a server round-trip
-    const lowerText = text.toLowerCase();
-    const DISMISSAL_WORDS = ['thank you jarvis', 'thanks jarvis', 'ok jarvis', 'okay jarvis',
-      'that will be all', "that's all", 'stand down', 'goodbye jarvis', 'bye jarvis',
-      'stop jarvis', 'jarvis stop', 'dismiss'];
-
-    if (DISMISSAL_WORDS.some(phrase => lowerText.includes(phrase))) {
-      endSession();
-      setTimeout(() => {
-        window.speechSynthesis.cancel();
-        const variants = [
-          "Understood. Standing by.",
-          "Of course. I'll be here when you need me.",
-          "Right. Standing down.",
-          "Noted. Have a good one.",
-        ];
-        const msg = variants[Math.floor(Math.random() * variants.length)];
-        const u = new SpeechSynthesisUtterance(msg);
-        u.rate = 0.88; u.pitch = 0.75;
-        u.onend = () => setVoiceState('idle');
-        window.speechSynthesis.speak(u);
-        setVoiceState('idle');
-      }, 200);
-      return;
-    }
-
-    // Only queue if not already processing
-    if (!jarvisProcessing && _voiceQueue.length === 0) {
-      _voiceQueue.push(text);
-      processVoiceQueue();
-    }
-  };
-
   jarvisRecognition.onerror = jarvisOnError;
-
-function jarvisOnError(e) {
-    if (e.error === 'no-speech') return; // ignore silence
-    if (e.error === 'aborted') return;   // we aborted it intentionally
-    showToast('Mic error: ' + e.error);
-    resetVoiceState();
-  };
-
   jarvisRecognition.onend = jarvisOnEnd;
-
-function jarvisOnEnd() {
-    // Continuous recognition stopped unexpectedly — restart if session still active
-    if (jarvisSessionActive && !jarvisProcessing) {
-      try { jarvisRecognition.start(); } catch(e) {}
-    }
-  };
 
   jarvisListening = true;
   setVoiceState('processing');
