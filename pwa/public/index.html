@@ -1841,12 +1841,6 @@ document.addEventListener("keydown", function(e) {
 
 // ── Fetch helper ──────────────────────────────────────────────────
 async function jfetch(endpoint, opts) {
-  if (endpoint.includes('voice/chat') && opts && opts.body) {
-    try {
-      const body = JSON.parse(opts.body);
-      if (body.greeting) { console.trace('[JARVIS] greeting call from:'); }
-    } catch(e) {}
-  }
   opts = opts || {};
   var isGet = !opts.method || opts.method.toUpperCase() === "GET";
   var sep   = endpoint.indexOf("?") === -1 ? "?" : "&";
@@ -2548,6 +2542,8 @@ async function toggleListening() {
   }
 
   // First tap — start session
+  // Clear any pending meeting prep that might auto-play during greeting
+  jfetch('/meeting-prep/pending').catch(()=>{});
   await startJarvisSession();
 }
 
