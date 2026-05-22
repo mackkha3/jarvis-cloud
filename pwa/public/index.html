@@ -2915,11 +2915,13 @@ function browserTTSThen(text, onComplete) {
 
   // Safari fix: voices list may be empty until onvoiceschanged fires
   if (window.speechSynthesis.getVoices().length === 0) {
+    let _spoken = false;
+    const speakOnce = () => { if (!_spoken) { _spoken = true; speak(); } };
     window.speechSynthesis.onvoiceschanged = () => {
       window.speechSynthesis.onvoiceschanged = null;
-      speak();
+      speakOnce();
     };
-    setTimeout(speak, 500); // fallback if onvoiceschanged never fires
+    setTimeout(speakOnce, 500); // fallback if onvoiceschanged never fires
   } else {
     speak();
   }
