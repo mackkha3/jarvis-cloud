@@ -675,27 +675,15 @@
 
   /* Phone: <768px — single column, all panels stack vertically */
   @media (max-width:767px){
-    html, body { overflow-x: clip !important; width: 100vw !important; max-width: 100vw !important; }
     body::before{ background-size:32px 55px; }
-    .panel, .topbar, .main, .col, .app * {
-      max-width: 100% !important;
-      box-sizing: border-box;
-    }
 
     .app{
       height:auto;
       min-height:100vh;
       grid-template-rows:auto auto auto auto;
-      padding:10px 12px;
+      padding:8px;
       gap:8px;
-      width:100vw;
-      max-width:100vw;
-      box-sizing:border-box;
-      overflow-x:hidden;
     }
-    .panel{ border-right-width:1px !important; }
-    .panel{ width:100%; max-width:100%; box-sizing:border-box; overflow:hidden; }
-    .topbar{ width:calc(100vw - 16px); box-sizing:border-box; }
 
     /* ── Header: single compressed row ─────────────────────────── */
     .topbar{
