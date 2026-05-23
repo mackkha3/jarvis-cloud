@@ -2490,6 +2490,8 @@ let jarvisSpeakingUntil = 0;  // timestamp — ignore mic input until after this
 let _voiceQueue = [];
 let _processingQueue = false;
 let _recognitionWatchdog = null;
+let _audioCtx = null;
+let _audioCtxUnlocked = false;
 let JARVIS_TTS_MODE = 'browser';
 const TTS_MODE_LABELS = {
   browser: '🔊 BROWSER VOICE',
@@ -2515,18 +2517,29 @@ function cycleTTSMode() {
 }
 
 // ── TAP HANDLER ──────────────────────────────────────────
-function unlockIOSAudio() {
-  if (window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance('');
-    u.volume = 0;
-    window.speechSynthesis.speak(u);
+function getAudioContext() {
+  if (!_audioCtx) {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
+  return _audioCtx;
+}
+
+function unlockAudioContext() {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') ctx.resume();
+  const buffer = ctx.createBuffer(1, 1, 22050);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  source.start(0);
+  _audioCtxUnlocked = true;
 }
 
 async function toggleListening() {
   const now = Date.now();
   if (now - _lastTap < 2000) return;
   _lastTap = now;
+  unlockAudioContext();
 
   // Instant beep feedback
   try {
@@ -2855,6 +2868,27 @@ function resetVoiceState() {
 }
 
 // ── AUDIO PLAYBACK ────────────────────────────────────────
+async function playAudioViaContext(audioUrl, onComplete) {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const response = await fetch(window.location.origin + audioUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+    let fired = false;
+    const once = () => { if (!fired) { fired = true; onComplete(); } };
+    source.onended = once;
+    source.start(0);
+    setTimeout(once, (audioBuffer.duration * 1000) + 2000);
+  } catch(e) {
+    console.log('[JARVIS] AudioContext playback failed:', e.message);
+    onComplete();
+  }
+}
+
 async function playAudioThen(audioUrl, fallbackText, onComplete) {
   setVoiceState('speaking');
   const finish = () => { if (onComplete) onComplete(); };
@@ -2865,34 +2899,14 @@ async function playAudioThen(audioUrl, fallbackText, onComplete) {
     return;
   }
 
-  // OpenAI or Kokoro mode — try server audio on ALL browsers
-  // If it fails for any reason (iOS restriction, network, etc), fall back to browser TTS
+  // Use pre-unlocked AudioContext — works on Safari after initial tap unlock
+  let completed = false;
+  const safeFinish = () => { if (!completed) { completed = true; finish(); } };
+
   try {
-    const audio = new Audio(window.location.origin + audioUrl);
-    let completed = false;
-    const safeFinish = () => { if (!completed) { completed = true; finish(); } };
-
-    audio.onended = safeFinish;
-    audio.onerror = () => {
-      browserTTSThen(fallbackText, safeFinish);
-    };
-
-    // Safety timeout — word-count estimate so a 10-word greeting times out in ~8s, not 30s
-    const wordCount = fallbackText ? fallbackText.split(' ').length : 10;
-    const estimatedMs = (wordCount * 600) + 2000;
-    setTimeout(() => safeFinish(), estimatedMs);
-
-    try {
-      await audio.play();
-      // Play succeeded — audio is playing, onended will fire
-    } catch(playErr) {
-      // Safari NotAllowedError or any other play failure — fall back immediately
-      completed = true;
-      browserTTSThen(fallbackText, finish);
-    }
-
+    await playAudioViaContext(audioUrl, safeFinish);
   } catch(e) {
-    browserTTSThen(fallbackText, finish);
+    browserTTSThen(fallbackText, safeFinish);
   }
 }
 
