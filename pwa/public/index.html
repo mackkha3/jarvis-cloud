@@ -2617,6 +2617,23 @@ async function jarvisOnResult(event) {
     return;
   }
 
+  // Minimum word filter — ignore noise and single-word pickups
+  const NOISE_WORDS = new Set(['the', 'uh', 'um', 'ah', 'what', 'huh', 'okay', 'ok', 'well', 'so', 'hmm', 'mhm', 'yeah', 'yes', 'no']);
+  const wakeWords = ['jarvis', 'hey jarvis'];
+  const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+  const isWakeWord = wakeWords.includes(lowerText.trim());
+
+  if (!isWakeWord) {
+    if (words.length === 1 && NOISE_WORDS.has(words[0].toLowerCase())) {
+      console.log('[JARVIS] Filtered noise word:', text);
+      return;
+    }
+    if (words.length < 2) {
+      console.log('[JARVIS] Filtered too short:', text);
+      return;
+    }
+  }
+
   if (!jarvisProcessing && _voiceQueue.length === 0) {
     _voiceQueue.push(text);
     processVoiceQueue();
