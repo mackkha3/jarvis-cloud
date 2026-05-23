@@ -754,9 +754,15 @@
     .log{
       max-height:110px;
       overflow-y:auto;
+      overflow-x:hidden;
       word-break:break-word;
       overflow-wrap:break-word;
+      width:100%;
+      max-width:100%;
+      box-sizing:border-box;
     }
+    .log .line{ max-width:100%; word-break:break-word; overflow-wrap:break-word; }
+    .panel-body{ width:100%; max-width:100%; box-sizing:border-box; overflow-x:hidden; }
 
     /* ── Panels ──────────────────────────────────────────────────── */
     .panel-body{ padding:.75rem; }
