@@ -675,7 +675,12 @@
 
   /* Phone: <768px — single column, all panels stack vertically */
   @media (max-width:767px){
+    html, body { overflow-x: clip !important; width: 100vw !important; max-width: 100vw !important; }
     body::before{ background-size:32px 55px; }
+    .panel, .topbar, .main, .col, .app * {
+      max-width: 100% !important;
+      box-sizing: border-box;
+    }
 
     .app{
       height:auto;
