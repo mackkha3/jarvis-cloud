@@ -675,8 +675,10 @@
 
   /* Phone: <768px — single column, all panels stack vertically */
   @media (max-width:767px){
-    body::before{ background-size:32px 55px; }
-
+    /* hex grid scaled down so it doesn't dominate */
+    body::before{
+      background-size:32px 55px;
+    }
     .app{
       height:auto;
       min-height:100vh;
@@ -684,49 +686,34 @@
       padding:8px;
       gap:8px;
     }
-
-    /* ── Header: single compressed row ─────────────────────────── */
+    /* Header: brand shrinks, keep one clock, hide extras */
     .topbar{
       display:flex;
-      flex-direction:row;
-      align-items:center;
-      height:48px;
-      padding:0 10px;
-      gap:0;
+      flex-direction:column;
+      align-items:stretch;
+      height:auto;
+      padding:10px 12px;
+      gap:8px;
     }
-    /* Brand: arc mark + J·A·R·V·I·S on left, shrinks gracefully */
-    .brand{ flex:1 1 0; min-width:0; gap:8px; }
-    .brand-mark{ width:26px; height:26px; flex-shrink:0; }
-    .brand-text{ min-width:0; overflow:hidden; }
     .brand-text .word{
-      font-size:12px;
-      letter-spacing:.12em;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
+      font-size:14px;
+      letter-spacing:.18em;
     }
     .brand-text .sub{ display:none; }
-    /* Hide the clock / date / location strip — no room on one line */
-    .center-strip{ display:none; }
-    /* Status strip: pills only, no wrap */
+    .center-strip{ justify-content:center;gap:10px; }
+    .date-tag{ display:none; }
+    .loc-tag{ display:none; }
+    .clock{ font-size:16px; }
     .status-strip{
-      flex:0 0 auto;
-      display:flex;
-      flex-direction:row;
-      align-items:center;
-      flex-wrap:nowrap;
-      gap:6px;
+      justify-content:flex-start;
+      flex-wrap:wrap;
+      gap:8px;
       height:auto;
-      justify-content:flex-end;
     }
-    .status-strip > *{ min-width:0; }
     .weather{ display:none; }
-    .key-icon-btn{ display:none; }
-    .pill{ font-size:7px; letter-spacing:.08em; padding:4px 7px; gap:4px; white-space:nowrap; }
-    .pill .pulse{ width:5px; height:5px; }
-
-    /* ── Main: single column — Voice first, Left, Right ─────────── */
-    .main{ display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box; overflow-x:hidden; }
+    .pill{ font-size:9px;padding:5px 9px; }
+    /* Single-column main — center (Voice) floats to top */
+    .main{ display:flex;flex-direction:column;gap:8px; }
     .col.center{ order:1; }
     .col.left  { order:2; }
     .col.right { order:3; }
@@ -737,109 +724,58 @@
       grid-template-rows:auto;
       height:auto;
     }
-
-    /* ── Voice Interface panel: full width, reactor fully visible ── */
-    #voice-body{ max-height:380px; overflow:visible; }
-    .reactor-svg-wrap{ width:220px; height:220px; }
-    .voice-orb{ width:130px; height:130px; }
-    .voice-orb-wrap{ flex:none; padding:4px 0; }
-
-    /* ── JARVIS Log: shorter on mobile ──────────────────────────── */
-    .log{
-      max-height:110px;
-      overflow-y:auto;
-      overflow-x:hidden;
-      word-break:break-word;
-      overflow-wrap:break-word;
-      width:100%;
-      max-width:100%;
-      box-sizing:border-box;
-    }
-    .log .line{ max-width:100%; word-break:break-word; overflow-wrap:break-word; }
-    .panel-body{ width:100%; max-width:100%; box-sizing:border-box; overflow-x:hidden; }
-
-    /* ── Panels ──────────────────────────────────────────────────── */
+    /* Panels: reduced padding */
     .panel-body{ padding:.75rem; }
-    .panel-meta{ display:none; }
-    .panel-head > *{ min-width:0; }
-    .panel-title{ white-space:normal; overflow-wrap:break-word; }
-
-    /* ── System Core reactor ─────────────────────────────────────── */
-    .core-rings{ width:220px; height:220px; }
-    .core-stage{ min-height:180px; }
-    .core-score{ font-size:48px; }
-
-    /* ── Numbers ─────────────────────────────────────────────────── */
+    /* Reactor core (System Core panel): compact */
+    .core-rings{ width:220px;height:220px; }
+    .core-stage{ min-height:200px; }
+    .core-score{ font-size:52px; }
+    /* JARVIS arc reactor orb: scale to 140px on mobile */
+    .reactor-svg-wrap{ width:200px;height:200px; }
+    /* Stats / triage numbers */
     .stat-val{ font-size:18px; }
     .triage-num{ font-size:20px; }
-
-    /* ── World clocks: local only ────────────────────────────────── */
+    /* World clocks: keep only Local CT */
     .clocks{ grid-template-columns:1fr; }
     .clocks .clk:not(:first-child){ display:none; }
-
-    /* ── Typography ──────────────────────────────────────────────── */
+    /* Body typography scale */
     .obj-text{ font-size:13px; }
     .event-title{ font-size:13px; }
-
-    /* ── Event row: drop countdown meta column ───────────────────── */
-    .event{ grid-template-columns:50px 4px 1fr; }
-    .event-meta{ display:none; }
-
-    /* ── Action bar: 2×2 grid ────────────────────────────────────── */
-    .actions{ grid-template-columns:repeat(2,1fr); gap:8px; }
-    .action{ font-size:9px; letter-spacing:.14em; padding:0 8px; }
+    /* Footer actions: 2 per row */
+    .actions{ grid-template-columns:repeat(2,1fr);gap:8px; }
+    .action{ font-size:9px;letter-spacing:.14em;padding:0 8px; }
     .action .key{ display:none; }
-    .action-bar{ grid-template-columns:repeat(2,1fr); gap:8px; }
-    .action-bar-btn{ font-size:9px; letter-spacing:.14em; height:40px; }
+    /* Action bar: 2 per row on phone */
+    .action-bar{ grid-template-columns:repeat(2,1fr);gap:8px; }
+    .action-bar-btn{ font-size:9px;letter-spacing:.14em;height:40px; }
 
-    /* ── Multi-column grids: collapse to fit phone ──────────────── */
-    .stat-pills{ grid-template-columns:1fr; }
-    .shortcuts{ grid-template-columns:repeat(2,1fr); }
-
-    /* ── Modal: phone-safe sizing ────────────────────────────────── */
-    .j-modal-box{ width:calc(100vw - 32px); max-width:none; padding:20px 16px; }
-
-    /* ── Corner brackets: hide on mobile to prevent right-edge bleed ─ */
-    .panel::before, .panel::after,
-    .topbar::before, .topbar::after{ display:none; }
-    .corner-tr, .corner-bl{ display:none; }
-
-    /* ── Overflow containment ────────────────────────────────────── */
-    html{ overflow-x:hidden; width:100%; }
-    body{ overflow-x:hidden; width:100%; }
-    *{ max-width:100%; }
-    .app{ overflow:hidden; }
-    .topbar{ width:100%; overflow:hidden; box-sizing:border-box; }
-    .center-strip{ display:none; }
-    .status-strip{ margin-left:auto; flex-shrink:0; }
+    /* ---- OVERFLOW FIXES (375px / 320px) ---- */
+    /* 1. html belt-and-suspenders — scrollbar lives on html, not body */
+    html{ overflow-x:hidden; }
+    /* 2. min-width:0 on flex children — default min-width:auto prevents shrinking */
+    .panel-head > *{ min-width:0; }
+    .brand{ min-width:0; }
+    .brand-text{ min-width:0; overflow:hidden; }
+    .center-strip > *{ min-width:0; }
+    .status-strip > *{ min-width:0; }
+    /* 3. Panel title: allow wrapping so wide Orbitron text doesn't push panel */
+    .panel-title{ white-space:normal; overflow-wrap:break-word; }
+    /* 4. Hide secondary panel meta on phone — frees room for title */
+    .panel-meta{ display:none; }
+    /* 5. Log: break long monospace strings that lack natural wrap points */
+    .log{ word-break:break-word; overflow-wrap:break-word; }
+    /* 6. flex rows with wide Orbitron/mono text — wrap instead of overflow */
     .nominal{ flex-wrap:wrap; row-gap:4px; }
     .triage-meta{ flex-wrap:wrap; row-gap:4px; }
     .voice-active{ flex-wrap:wrap; row-gap:6px; }
     .next-run{ flex-wrap:wrap; row-gap:4px; }
     .progress-head{ flex-wrap:wrap; row-gap:2px; }
+    /* 7. Plain-text blocks with long strings */
     .trigger{ overflow-wrap:break-word; }
     .voice-cmd{ overflow-wrap:break-word; }
-
-    /* ── Reactor performance: disable two of three ring rotations ─── */
-    .ring-rotate-rev{ animation:none; }
-    .ring-rotate-fast{ animation:none; }
-
-    /* ── Disable viewport/panel scan sweeps on mobile ────────────── */
-    body::after{ animation:none; }
-    .viewport-scan,[class*="scan"]{ animation:none; }
-
-    /* ── Reactor: disable expensive drop-shadow filters on mobile ─── */
-    .reactor--processing .reactor-svg-wrap,
-    .reactor--speaking .reactor-svg-wrap,
-    .jarvis-reactor .reactor-svg-wrap { filter:none !important; }
-
-    /* ── Reactor: replace container filter-animations with opacity ── */
-    .reactor--active,
-    .reactor--listening { animation:none; }
-
-    /* ── Use cheap box-shadow on core for listening/active glow ──── */
-    .reactor--listening .voice-orb-inner,
-    .reactor--active .voice-orb-inner { box-shadow:0 0 15px rgba(0,212,255,0.5); }
+    /* 8. Event row: drop the auto-width meta column entirely on phone */
+    .event{ grid-template-columns:50px 4px 1fr; }
+    .event-meta{ display:none; }
   }
 
   /* Narrow phone (≤420px) — tighten pills and topbar further */
