@@ -2875,14 +2875,24 @@ async function playAudioViaContext(audioUrl, onComplete) {
     const response = await fetch(window.location.origin + audioUrl);
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    // iOS fix: 300ms silence buffer opens audio route at full volume
+    // Without this, first ~500ms fades in from silence on iPhone
+    const silenceBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.3), ctx.sampleRate);
+    const silenceSource = ctx.createBufferSource();
+    silenceSource.buffer = silenceBuffer;
+    silenceSource.connect(ctx.destination);
+    silenceSource.start(0);
+
+    // Play actual audio 300ms later
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(ctx.destination);
     let fired = false;
     const once = () => { if (!fired) { fired = true; onComplete(); } };
     source.onended = once;
-    source.start(0);
-    setTimeout(once, (audioBuffer.duration * 1000) + 2000);
+    source.start(ctx.currentTime + 0.3);
+    setTimeout(once, (audioBuffer.duration * 1000) + 3000);
   } catch(e) {
     console.log('[JARVIS] AudioContext playback failed:', e.message);
     onComplete();
