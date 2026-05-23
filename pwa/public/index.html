@@ -2712,7 +2712,7 @@ async function startJarvisSession() {
     try { jarvisRecognition.stop(); } catch(e) {}
     if (window.speechSynthesis) window.speechSynthesis.cancel();
 
-    await playAudioThen(null, resp.response, () => {
+    await playAudioThen(resp.audio_url, resp.response, () => {
       jarvisListening = true;
       setVoiceState('listening');
       try {
