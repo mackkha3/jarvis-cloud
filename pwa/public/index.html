@@ -681,9 +681,7 @@
       height:auto;
       min-height:100vh;
       grid-template-rows:auto auto auto auto;
-      padding:8px;
-      padding-right:max(10px, env(safe-area-inset-right, 10px));
-      padding-left:max(8px, env(safe-area-inset-left, 8px));
+      padding:8px 14px 8px 8px;
       gap:8px;
     }
 
@@ -800,10 +798,6 @@
 
     /* ── Modal: phone-safe sizing ────────────────────────────────── */
     .j-modal-box{ width:calc(100vw - 32px); max-width:none; padding:20px 16px; }
-
-    /* ── Right border explicit fix ─────────────────────────────────── */
-    .panel{ border-right: 1px solid rgba(0,212,255,0.4) !important; }
-    .topbar{ border-right: 1px solid rgba(0,212,255,0.4) !important; }
 
     /* ── Corner brackets: hide on mobile to prevent right-edge bleed ─ */
     .panel::before, .panel::after,
