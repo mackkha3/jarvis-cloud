@@ -2288,8 +2288,12 @@ let _loadVoiceInProgress = false;
 async function loadVoice() {
   // Don't rebuild panel if session is active
   if (jarvisSessionActive || jarvisListening || jarvisProcessing) return;
-  // Reactor already injected — skip entirely
-  if (document.getElementById("voice-orb")) return;
+  // Reactor already injected — just update TTS indicator and skip re-injection
+  if (document.getElementById("voice-orb")) {
+    var ttsEl = document.getElementById('tts-mode-indicator');
+    if (ttsEl) ttsEl.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE] || TTS_MODE_LABELS.browser;
+    return;
+  }
   // Serialize concurrent calls — only one injection at a time
   if (_loadVoiceInProgress) return;
   _loadVoiceInProgress = true;
