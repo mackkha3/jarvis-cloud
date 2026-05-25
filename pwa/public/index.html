@@ -2526,12 +2526,17 @@ function getAudioContext() {
 }
 
 function unlockAudioContext() {
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') ctx.resume();
-  const buffer = ctx.createBuffer(1, 1, 22050);
-  const source = ctx.createBufferSource();
+  // Recreate AudioContext on every tap — iOS Safari closes the audio route
+  // between sessions even when state reports as 'running'
+  if (_audioCtx && _audioCtx.state !== 'closed') {
+    try { _audioCtx.close(); } catch(e) {}
+  }
+  _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  const buffer = _audioCtx.createBuffer(1, 1, 22050);
+  const source = _audioCtx.createBufferSource();
   source.buffer = buffer;
-  source.connect(ctx.destination);
+  source.connect(_audioCtx.destination);
   source.start(0);
   _audioCtxUnlocked = true;
 }
