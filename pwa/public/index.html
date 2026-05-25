@@ -2288,25 +2288,8 @@ let _loadVoiceInProgress = false;
 async function loadVoice() {
   // Don't rebuild panel if session is active
   if (jarvisSessionActive || jarvisListening || jarvisProcessing) return;
-  // Reactor already injected — just update TTS indicator and skip re-injection
-  if (document.getElementById("voice-orb")) {
-    var ttsEl = document.getElementById('tts-mode-indicator');
-    if (ttsEl) {
-      ttsEl.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE] || TTS_MODE_LABELS.browser;
-    } else {
-      // Indicator missing — inject it after the orb
-      var orbWrap = document.querySelector('.voice-orb-wrap');
-      if (orbWrap) {
-        var ind = document.createElement('div');
-        ind.id = 'tts-mode-indicator';
-        ind.onclick = cycleTTSMode;
-        ind.style.cssText = 'text-align:center;margin-top:8px;cursor:pointer;font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;opacity:0.6';
-        ind.textContent = TTS_MODE_LABELS[JARVIS_TTS_MODE] || TTS_MODE_LABELS.browser;
-        orbWrap.appendChild(ind);
-      }
-    }
-    return;
-  }
+  // Reactor already injected — skip entirely
+  if (document.getElementById("voice-orb")) return;
   // Serialize concurrent calls — only one injection at a time
   if (_loadVoiceInProgress) return;
   _loadVoiceInProgress = true;
