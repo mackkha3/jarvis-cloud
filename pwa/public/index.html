@@ -1418,22 +1418,27 @@
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="scan" style="animation-delay:.5s"></div>
         <div class="panel-head">
-          <div class="panel-title">System Core <span class="dim">// PRODUCTIVITY INDEX</span></div>
-          <div class="panel-meta">REAL-TIME · 1Hz</div>
+          <div class="panel-title">Token Spend <span class="dim">// CLAUDE + OPENAI</span></div>
+          <div class="panel-meta" id="spend-meta">LOADING...</div>
         </div>
         <div class="panel-body" style="padding:14px;display:flex;flex-direction:column;gap:0">
           <div style="text-align:center;padding:16px 0 12px">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.12em;margin-bottom:8px">EMAILS TRIAGED</div>
-            <div id="core-score" style="font-family:'Orbitron',sans-serif;font-size:64px;color:var(--cyan);line-height:1;text-shadow:0 0 30px rgba(0,212,255,0.4)">—</div>
-            <div id="core-sub" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;margin-top:8px">LOADING...</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.12em;margin-bottom:8px">TODAY · CT</div>
+            <div id="spend-today" style="font-family:'Orbitron',sans-serif;font-size:64px;color:var(--mint);line-height:1;text-shadow:0 0 30px rgba(0,255,157,0.4)">—</div>
+            <div id="spend-breakdown" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;margin-top:8px">LOADING...</div>
           </div>
-          <div id="stat-pills" style="display:flex;flex-direction:column;gap:0;border-top:1px solid var(--border);padding-top:10px;position:relative">
+          <div style="border-top:1px solid var(--border);padding-top:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.1em">MTD</span>
+              <span id="spend-mtd" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--amber);letter-spacing:.05em">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.1em">UPDATED</span>
+              <span id="spend-updated" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.05em">—</span>
+            </div>
           </div>
+          <div id="stat-pills" style="display:none"></div>
         </div>
-        <a class="link-row" href="/evening-debrief.html" target="_blank" rel="noopener noreferrer" style="text-decoration:none;padding:8px 14px 10px;flex-shrink:0">
-          <span>VIEW EVENING DEBRIEF</span>
-          <span class="arrow">→</span>
-        </a>
       </article>
 
       <!-- INBOX INTELLIGENCE -->
@@ -1738,6 +1743,7 @@ setTimeout(function() {
 function startDashboard() {
   loadAll();
   setInterval(loadAll, 60000);
+  setInterval(loadSpend, 30000);
   setTimeout(function(){ setInterval(pollVoiceState, 2000); }, 3000);
   setTimeout(initLocation, 2000);
   setInterval(checkMeetingPrep, 30000);
@@ -2027,6 +2033,38 @@ async function loadSystemStatus() {
     }
   }
 }
+
+// ── Panel: Token Spend ────────────────────────────────────────────
+var _spendLastFetch = 0;
+async function loadSpend() {
+  try {
+    var d = await jfetch("/usage/spend");
+    var today = d.today || {};
+    var mtd   = d.month_to_date || {};
+    var todayEl     = document.getElementById("spend-today");
+    var breakdownEl = document.getElementById("spend-breakdown");
+    var mtdEl       = document.getElementById("spend-mtd");
+    var metaEl      = document.getElementById("spend-meta");
+    var updatedEl   = document.getElementById("spend-updated");
+    if (todayEl)     todayEl.textContent     = "$" + (today.total || 0).toFixed(2);
+    if (breakdownEl) breakdownEl.textContent = "CLAUDE $" + (today.claude || 0).toFixed(4) + " · TTS $" + (today.openai_tts || 0).toFixed(4);
+    if (mtdEl)       mtdEl.textContent       = "$" + (mtd.total || 0).toFixed(2);
+    if (metaEl)      metaEl.textContent      = d.as_of || "LIVE";
+    _spendLastFetch = Date.now();
+    if (updatedEl)   updatedEl.textContent   = "just now";
+  } catch(_) {
+    var el = document.getElementById("spend-today");
+    if (el) el.textContent = "—";
+    var el2 = document.getElementById("spend-breakdown");
+    if (el2) el2.textContent = "unavailable";
+  }
+}
+setInterval(function() {
+  var el = document.getElementById("spend-updated");
+  if (!el || !_spendLastFetch) return;
+  var sec = Math.round((Date.now() - _spendLastFetch) / 1000);
+  el.textContent = sec < 5 ? "just now" : sec + "s ago";
+}, 10000);
 
 // ── Panel: Activity Matrix — update today's bar from digest ───────
 async function loadChart() {
@@ -2476,7 +2514,7 @@ async function loadAll() {
   await Promise.allSettled([
     loadBrief(), loadEvents(), loadSystemStatus(),
     loadChart(), loadLog(),    loadTriage(), loadTasks(),
-    loadTTSMode(),
+    loadTTSMode(), loadSpend(),
   ]);
 }
 

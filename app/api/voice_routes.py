@@ -345,6 +345,12 @@ def register_voice_routes(app: Flask) -> None:
         cfg = get_config()
         return jsonify({"mode": cfg.tts_mode})
 
+    @app.route("/api/usage/spend", methods=["GET"])
+    @require_api_key
+    def get_usage_spend():
+        from app.usage.tracker import get_summary
+        return jsonify(get_summary())
+
 
 def register_voice_chat_routes(app: Flask) -> None:
     """Register closed-loop conversation and audio-serving routes."""
