@@ -259,6 +259,16 @@ If no meeting was just created, do NOT offer meeting prep unprompted."""
                 "output": response.usage.output_tokens,
             }
 
+            try:
+                from app.usage.tracker import record_claude
+                record_claude(
+                    model=model,
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                )
+            except Exception as _te:
+                logger.error(f"Token tracking failed: {_te}")
+
             # Update conversation history (keep last 5 turns = 10 messages)
             self._conversation_history.append(
                 {"role": "user", "content": query}

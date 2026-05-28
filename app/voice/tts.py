@@ -121,6 +121,11 @@ def _openai_tts(text: str) -> Optional[bytes]:
             response_format="wav",
         )
         logger.debug("OpenAI TTS synthesized %d chars", len(text))
+        try:
+            from app.usage.tracker import record_openai_tts
+            record_openai_tts(len(text))
+        except Exception as _te:
+            logger.error("TTS tracking failed: %s", _te)
         return response.content
     except Exception as e:
         logger.error("OpenAI TTS error: %s", e)
