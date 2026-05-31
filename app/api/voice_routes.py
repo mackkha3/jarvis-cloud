@@ -351,6 +351,19 @@ def register_voice_routes(app: Flask) -> None:
         from app.usage.tracker import get_summary
         return jsonify(get_summary())
 
+    @app.route("/api/events/health", methods=["GET"])
+    @require_api_key
+    def events_health():
+        from app.patterns import store
+        from app.config.features import is_enabled
+        enabled = is_enabled('event_recording')
+        return jsonify({
+            "feature_enabled": enabled,
+            "db_initialized": store._initialized,
+            "db_path_exists": store.DB_PATH.exists() if store.DB_PATH else False,
+            "recent_event_count": len(store.query_recent(days=1)) if enabled else 0,
+        })
+
 
 def register_voice_chat_routes(app: Flask) -> None:
     """Register closed-loop conversation and audio-serving routes."""
@@ -440,6 +453,12 @@ def register_voice_chat_routes(app: Flask) -> None:
             })
 
         # ── CASE 3: Real question — Claude + follow-up ──
+        try:
+            from app.patterns import recorders
+            recorders.voice_query(user_text, intent="general")
+        except Exception:
+            pass
+
         context = _get_cached_context(session)
         ai = JarvisAI()
         ai._conversation_history = session["history"].copy()

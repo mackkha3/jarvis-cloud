@@ -36,6 +36,11 @@ structlog==24.4.0
 # --- Security ---
 cryptography==43.0.1
 
+# --- Phase 2: Encrypted event store ---
+# sqlcipher3-binary ships precompiled (no system deps needed on Railway).
+# store.py also tries pysqlcipher3 as fallback if sqlcipher3 import fails.
+sqlcipher3-binary==0.5.4
+
 # --- Voice / TTS (Kokoro daemon) ---
 # PINNED: These exact versions work together on Intel Mac + Python 3.11
 # Do NOT upgrade without testing — torch/numpy/transformers version conflicts are real

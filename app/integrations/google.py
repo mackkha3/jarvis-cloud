@@ -208,6 +208,13 @@ class GoogleCalendar:
                 calendarId="primary", body=event_body
             ).execute()
             logger.info("Calendar event created: '%s' on %s", title, date)
+            try:
+                from app.patterns import recorders
+                start_iso = result.get("start", {}).get("dateTime") or result.get("start", {}).get("date", "")
+                attendees_count = len(result.get("attendees", []))
+                recorders.event_created(title, start_iso, attendees_count)
+            except Exception:
+                pass
             return result
         except Exception as e:
             logger.error(f"Calendar event creation error: {e}")
@@ -321,6 +328,11 @@ class GoogleTasks:
             ).execute()
 
             logger.info("Task created: '%s'", title)
+            try:
+                from app.patterns import recorders
+                recorders.task_created(title, due_date)
+            except Exception:
+                pass
             return {
                 "success": True,
                 "task_id": result.get("id"),
@@ -385,6 +397,11 @@ class GoogleTasks:
             ).execute()
 
             logger.info("Task completed: '%s' (score %.2f)", best_match.get("title"), best_score)
+            try:
+                from app.patterns import recorders
+                recorders.task_completed(best_match.get("title", ""))
+            except Exception:
+                pass
             return {
                 "success": True,
                 "title": best_match.get("title"),
@@ -496,6 +513,12 @@ class GoogleGmail:
                 })
 
             logger.info(f"Gmail: fetched {len(emails)} recent emails")
+            try:
+                from app.patterns import recorders
+                for em in emails:
+                    recorders.email_received(em.get("from", ""), em.get("subject", ""))
+            except Exception:
+                pass
             return emails
 
         except Exception as e:
