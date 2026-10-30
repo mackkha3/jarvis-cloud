@@ -1,0 +1,45 @@
+# Coverage is measured on JARVIS's deterministic business logic: routing,
+# config, cost tracking, the Google Calendar/Tasks request-building, auth, the
+# event recorders, and the morning-briefing pipeline + formatters.
+#
+# The modules below are omitted on purpose, each because it is runtime/IO glue
+# with no branching logic that a unit test can meaningfully pin:
+#
+#   * app/voice/*          — Kokoro TTS daemon + torch audio runtime (ML);
+#                            exercised by the opt-in live smoke, not unit tests.
+#   * *_html.py / digest   — HTML string renderers (presentation templates).
+#   * app/api/server + *_routes — Flask app factory and route wiring.
+#   * app/briefings/evening, meeting_prep — share morning.py's structure;
+#                            morning is tested end-to-end as the representative
+#                            pipeline (documented follow-up to backfill these).
+#   * app/patterns/store   — SQLCipher-backed store; needs the encrypted DB.
+#   * app/config.py        — dead module, shadowed by the app/config/ package.
+#   * app/logging_config, run.py — bootstrap.
+
+[run]
+source = app
+branch = True
+omit =
+    app/config.py
+    app/voice/*
+    app/briefings/digest_html.py
+    app/briefings/morning_html.py
+    app/briefings/evening_html.py
+    app/briefings/evening.py
+    app/briefings/meeting_prep.py
+    app/api/server.py
+    app/api/dashboard_routes.py
+    app/api/briefing_routes.py
+    app/api/voice_routes.py
+    app/patterns/store.py
+    app/logging_config.py
+    run.py
+
+[report]
+show_missing = True
+precision = 1
+fail_under = 80
+exclude_also =
+    if __name__ == .__main__.:
+    def __repr__
+    raise NotImplementedError
