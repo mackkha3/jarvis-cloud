@@ -121,10 +121,17 @@ class GoogleCalendar:
             return []
 
         cfg = get_config()
-        now = datetime.now(timezone.utc)
 
-        # Today's range in UTC
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # "Today" must be defined in the OWNER's timezone, not UTC. Computing the
+        # day window from UTC midnight meant that after ~6pm Central the window had
+        # already rolled over to the next UTC day, so tomorrow's events leaked into
+        # today's briefing (and the brief announced the wrong date). Anchor the day
+        # boundary to cfg.timezone; the tz-aware isoformat still carries a valid
+        # RFC3339 offset for the Calendar API.
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo(cfg.timezone)
+        now_local = datetime.now(tz)
+        start_of_day = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
 
         try:
