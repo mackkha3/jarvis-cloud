@@ -1,0 +1,93 @@
+{
+  "description": "Seed corpus for the JARVIS retrieval demo. Each document describes a real part of the system's engineering, so the retrieval demo runs on genuine content and doubles as a tour of the design. No personal data.",
+  "documents": [
+    {
+      "source_id": "routing",
+      "file": "docs/routing.md",
+      "title": "Three-layer query routing",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/routing.md",
+      "date": "2026-01-10",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "privacy",
+      "file": "docs/privacy.md",
+      "title": "Event store and data minimisation",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/privacy.md",
+      "date": "2026-01-11",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "deployment",
+      "file": "docs/deployment.md",
+      "title": "Deployment and runtime",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/deployment.md",
+      "date": "2026-01-12",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "testing",
+      "file": "docs/testing.md",
+      "title": "Testing strategy",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/testing.md",
+      "date": "2026-01-13",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "retrieval-core",
+      "file": "docs/retrieval-core.md",
+      "title": "Retrieval core design",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/retrieval-core.md",
+      "date": "2026-01-14",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "retrieval-evals",
+      "file": "docs/retrieval-evals.md",
+      "title": "Retrieval evaluation gate",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/retrieval-evals.md",
+      "date": "2026-01-15",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "abstention",
+      "file": "docs/abstention.md",
+      "title": "Confidence threshold and abstention",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/abstention.md",
+      "date": "2026-01-16",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "least-privilege",
+      "file": "docs/least-privilege.md",
+      "title": "Least-privilege and auditable access",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/least-privilege.md",
+      "date": "2026-01-17",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "reindex-rollback",
+      "file": "docs/reindex-rollback.md",
+      "title": "Versioned indexes and safe rollback",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/reindex-rollback.md",
+      "date": "2026-01-18",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "mcp-server",
+      "file": "docs/mcp-server.md",
+      "title": "MCP server adapter",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/mcp-server.md",
+      "date": "2026-01-19",
+      "permission_tag": "owner"
+    },
+    {
+      "source_id": "features-flags",
+      "file": "docs/features-flags.md",
+      "title": "Feature flags",
+      "link": "https://github.com/mackkha3/jarvis-cloud/blob/main/demo_corpus/docs/features-flags.md",
+      "date": "2026-01-20",
+      "permission_tag": "owner"
+    }
+  ]
+}

@@ -33,6 +33,7 @@ PWA (voice UI, dashboard)
 Flask API ── auth ── 3-layer Claude router ──► Anthropic (Haiku / Sonnet)
         │                                  └──► Layer 1: local regex (free, instant)
         ├── Google integrations (Calendar · Tasks · Gmail · Drive)
+        ├── Retrieval / RAG (cited context, flag-gated; MCP adapter planned)
         ├── Briefings (morning / evening / meeting-prep)
         ├── Usage tracker (per-call cost)
         └── Voice (OpenAI TTS → Kokoro fallback)
@@ -49,6 +50,62 @@ around that single decision.
 - **Frontend:** mobile-first PWA (`pwa/`).
 - **Config:** a single Pydantic-validated settings object (`app/config/`) that
   fails fast on a bad key or timezone rather than silently in production.
+
+## Retrieval (RAG)
+
+JARVIS can ground its answers in a document corpus. The retrieval layer
+(`app/rag/`) is built as **one core with two adapters** — the design goal was a
+reusable, swappable asset, not a feature welded to one endpoint.
+
+```
+chunker ─► embedder ─► store ─► retrieve ─► observe      (the core, app/rag/)
+                                   │
+                 ┌─────────────────┴─────────────────┐
+                 ▼                                     ▼
+        JARVIS context hook                   MCP server (planned)
+     (app/core/claude.py, flag-gated)        (any MCP client, same core)
+```
+
+The core depends on nothing above it — no Flask, no assistant code. Today the
+in-process context hook consumes it; because the core is self-contained, a
+second adapter exposing the same `retrieve()` path as a Model Context Protocol
+tool is a thin wrapper rather than a second retrieval system — that adapter is
+the next planned step, not yet shipped.
+
+What makes it production-shaped rather than a demo:
+
+- **Cited answers, or none.** Every hit carries its source's title/link/date, and
+  a confidence threshold produces an explicit *abstain* ("I don't know") decision
+  rather than returning a weak match. The context hook injects nothing on abstain,
+  so the assistant never answers off noise.
+- **A retrieval eval gate in CI.** A labelled eval set (`demo_corpus/evalset.json`)
+  measures recall@5, MRR, and a false-answer rate on off-topic negatives. These
+  are **floors in CI** (`tests/eval/test_rag_gate.py`): a regression in chunking,
+  embedding, or the threshold fails the build. On the seed corpus the gate holds
+  recall@5 = 1.0, MRR = 0.95, false-answer rate = 0.0.
+- **Reproducible without an API key.** The default embedder is deterministic and
+  offline (hashed words + subword n-grams, numpy only), so the evals are stable
+  across machines and a reviewer can clone-and-run. Swapping in OpenAI
+  `text-embedding-3-small` for production is a one-line config change
+  (`RAG_EMBEDDER=openai`) and nothing else in the core moves.
+- **Observable, with data minimisation.** Every query writes one audit record —
+  latency, confidence, decision, collection, and the document *ids* used — and
+  deliberately **never the query text or chunk contents**, mirroring the event
+  store's stance.
+- **Least-privilege access.** Chunks carry permission tags; search filters to the
+  caller's allowed tags before scoring. Drive indexing uses read-only scopes.
+- **Safe rollback.** Re-indexing writes a new, inactive collection, runs the eval
+  gate against it, and only flips a single `active` pointer if it passes. Rollback
+  is flipping the pointer back; the previous index is never overwritten.
+
+The whole layer is behind the `FEATURE_RAG` flag and off by default, so a
+deployment with no corpus behaves exactly as before.
+
+```bash
+# Build/activate an index from the seed corpus (offline embedder, no key)
+python -m app.rag.corpus demo_corpus --db /tmp/rag.db
+FEATURE_RAG=true RAG_DB_PATH=/tmp/rag.db <run the app>
+```
 
 ## Running the tests
 
