@@ -97,10 +97,55 @@ def _is_complex_query(query: str) -> bool:
     return False
 
 
+# ====== RETRIEVAL (RAG) CONTEXT HOOK ======
+# The adapter that wires the standalone retrieval core into the assistant. It is
+# guarded by the FEATURE_RAG flag and wrapped so retrieval can never break the
+# response path: any failure, or an abstain decision, simply adds no context.
+
+_rag_service = None  # lazy singleton — one SQLite handle for the process
+
+
+def _get_rag_service():
+    global _rag_service
+    if _rag_service is None:
+        from app.rag import RagService
+        _rag_service = RagService()
+    return _rag_service
+
+
+def _augment_with_rag(query: str, context: Optional[str]) -> Optional[str]:
+    """
+    Return ``context`` with retrieved, cited snippets appended when retrieval is
+    enabled and confident. On abstain or any error, returns ``context`` unchanged.
+    """
+    from app.config.features import is_enabled
+
+    if not is_enabled("rag"):
+        return context
+    try:
+        result = _get_rag_service().query(query, k=4, caller="context_hook")
+        if not result.answerable:
+            return context  # "I don't know" path — inject nothing
+        blocks = []
+        for i, hit in enumerate(result.hits, 1):
+            cite = hit.chunk.citation
+            label = cite.get("title") or hit.chunk.source_id
+            link = cite.get("link", "")
+            blocks.append(f"[{i}] {label} ({link})\n{hit.chunk.text}")
+        retrieved = (
+            "RETRIEVED KNOWLEDGE (cite the bracketed sources when you use them; "
+            "if these do not answer the question, say so):\n\n" + "\n\n".join(blocks)
+        )
+        return f"{context}\n\n{retrieved}" if context else retrieved
+    except Exception as exc:  # retrieval is best-effort, never load-bearing
+        logger.warning(f"RAG augmentation skipped: {exc}")
+        return context
+
+
 class JarvisAI:
     """
     Main AI interface for JARVIS Cloud.
-    
+
     Handles 3-layer routing, conversation history, and
     system prompt construction per customer config.
     """
@@ -230,6 +275,9 @@ If no meeting was just created, do NOT offer meeting prep unprompted."""
                     "model": "local",
                     "tokens": {"input": 0, "output": 0},
                 }
+
+        # ---- RETRIEVAL: augment context with cited knowledge (flag-gated) ----
+        context = _augment_with_rag(query, context)
 
         # ---- LAYER 2 or 3: Claude API ----
         if force_layer == 3 or (force_layer is None and _is_complex_query(query)):

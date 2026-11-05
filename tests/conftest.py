@@ -55,6 +55,11 @@ _TEST_ENV = {
     # Redirect the usage tracker's JSON store into a throwaway temp dir so its
     # import-time mkdir never touches /app/data on a CI runner.
     "USAGE_FILE": str(_USAGE_DIR / "usage.json"),
+    # RAG: default the store into a temp dir and keep the feature off unless a
+    # test opts in, so nothing writes to /app/data and the offline embedder is used.
+    "RAG_DB_PATH": str(_USAGE_DIR / "rag.db"),
+    "RAG_EMBEDDER": "hashing",
+    "FEATURE_RAG": "false",
 }
 
 for _k, _v in _TEST_ENV.items():
@@ -100,3 +105,25 @@ def fresh_config():
     cfg = JarvisConfig()
     yield cfg
     get_config.cache_clear()
+
+
+@pytest.fixture
+def rag_store(tmp_path):
+    """A RagStore on a throwaway SQLite file, closed on teardown."""
+    from app.rag import RagStore
+
+    store = RagStore(str(tmp_path / "rag.db"))
+    yield store
+    store.close()
+
+
+@pytest.fixture
+def indexed_store(rag_store):
+    """A RagStore with the demo corpus indexed and active."""
+    from pathlib import Path
+
+    from app.rag.corpus import reindex
+
+    corpus = Path(__file__).resolve().parents[1] / "demo_corpus"
+    reindex(str(corpus), store=rag_store, activate=True)
+    return rag_store

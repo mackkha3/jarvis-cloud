@@ -1,0 +1,35 @@
+{
+  "description": "Labelled retrieval eval set for the JARVIS demo corpus. Positives pair a realistic query with the source_id that should be retrieved; negatives are off-topic queries the retriever should abstain on. Thresholds live in app/rag/evaluate.py and gate CI.",
+  "positives": [
+    {"query": "how does the three layer query routing work", "expected": "routing"},
+    {"query": "when does jarvis escalate to sonnet instead of haiku", "expected": "routing"},
+    {"query": "what does the event store record and what does it leave out", "expected": "privacy"},
+    {"query": "how is personal data minimised in the logs", "expected": "privacy"},
+    {"query": "where is jarvis deployed and what runs the container", "expected": "deployment"},
+    {"query": "what gunicorn flask railway docker runtime is used", "expected": "deployment"},
+    {"query": "how are the unit integration and evaluation tests organised", "expected": "testing"},
+    {"query": "how are the google and anthropic boundaries mocked in tests", "expected": "testing"},
+    {"query": "why is retrieval built as one core with two adapters", "expected": "retrieval-core"},
+    {"query": "how is cosine similarity search stored in sqlite with numpy", "expected": "retrieval-core"},
+    {"query": "how is retrieval quality measured with recall and mrr", "expected": "retrieval-evals"},
+    {"query": "what is the false answer rate gate in continuous integration", "expected": "retrieval-evals"},
+    {"query": "how does the confidence threshold decide to abstain", "expected": "abstention"},
+    {"query": "what is the i don't know path when no good match exists", "expected": "abstention"},
+    {"query": "how do permission tags enforce least privilege on chunks", "expected": "least-privilege"},
+    {"query": "what read only scopes does drive indexing use", "expected": "least-privilege"},
+    {"query": "how do versioned collections make reindexing safe to roll back", "expected": "reindex-rollback"},
+    {"query": "how does promoting a new index with a pointer flip work", "expected": "reindex-rollback"},
+    {"query": "how is the retrieval core exposed as an mcp server tool", "expected": "mcp-server"},
+    {"query": "what model context protocol search tool is provided", "expected": "mcp-server"},
+    {"query": "how do environment variable feature flags gate capabilities", "expected": "features-flags"},
+    {"query": "how is the retrieval feature flag turned on or off", "expected": "features-flags"}
+  ],
+  "negatives": [
+    {"query": "what is the capital of france"},
+    {"query": "recipe for banana bread with walnuts"},
+    {"query": "best running shoes for a marathon in 2026"},
+    {"query": "who won the world cup final"},
+    {"query": "how do i change a flat tyre on a car"},
+    {"query": "lyrics to a popular pop song"}
+  ]
+}
