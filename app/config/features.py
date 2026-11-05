@@ -15,6 +15,7 @@ FEATURES = {
     'event_recording': _flag('FEATURE_EVENTS'),
     'pattern_engine': _flag('FEATURE_PATTERNS'),
     'insight_surfacing': _flag('FEATURE_INSIGHTS'),
+    'rag': _flag('FEATURE_RAG'),
 }
 
 
