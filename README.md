@@ -33,7 +33,7 @@ PWA (voice UI, dashboard)
 Flask API ── auth ── 3-layer Claude router ──► Anthropic (Haiku / Sonnet)
         │                                  └──► Layer 1: local regex (free, instant)
         ├── Google integrations (Calendar · Tasks · Gmail · Drive)
-        ├── Retrieval / RAG (cited context, flag-gated; MCP adapter planned)
+        ├── Retrieval / RAG (cited context, flag-gated) ──► also an MCP server
         ├── Briefings (morning / evening / meeting-prep)
         ├── Usage tracker (per-call cost)
         └── Voice (OpenAI TTS → Kokoro fallback)
@@ -62,15 +62,16 @@ chunker ─► embedder ─► store ─► retrieve ─► observe      (the co
                                    │
                  ┌─────────────────┴─────────────────┐
                  ▼                                     ▼
-        JARVIS context hook                   MCP server (planned)
+        JARVIS context hook                       MCP server
      (app/core/claude.py, flag-gated)        (any MCP client, same core)
 ```
 
-The core depends on nothing above it — no Flask, no assistant code. Today the
-in-process context hook consumes it; because the core is self-contained, a
-second adapter exposing the same `retrieve()` path as a Model Context Protocol
-tool is a thin wrapper rather than a second retrieval system — that adapter is
-the next planned step, not yet shipped.
+The core depends on nothing above it — no Flask, no assistant code — so the same
+`retrieve()` path serves both adapters unchanged: the in-process JARVIS context
+hook, and an `mcp` server (`app/rag/mcp_server.py`) that exposes retrieval as a
+single `search` tool to any Model Context Protocol client. The MCP adapter is a
+thin wrapper — thresholding, permission filtering, citations and auditing all
+live in the core and are inherited, not reimplemented.
 
 What makes it production-shaped rather than a demo:
 
@@ -105,6 +106,10 @@ deployment with no corpus behaves exactly as before.
 # Build/activate an index from the seed corpus (offline embedder, no key)
 python -m app.rag.corpus demo_corpus --db /tmp/rag.db
 FEATURE_RAG=true RAG_DB_PATH=/tmp/rag.db <run the app>
+
+# Or expose the same core to any MCP client as a `search` tool:
+pip install -r requirements-mcp.txt        # optional SDK, runtime-only
+RAG_DB_PATH=/tmp/rag.db python -m app.rag.mcp_server
 ```
 
 ## Running the tests
