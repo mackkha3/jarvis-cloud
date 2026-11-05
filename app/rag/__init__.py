@@ -6,13 +6,12 @@ This package is a self-contained, swappable retrieval asset:
     chunker  -> embedder -> store -> retrieve -> observe
 
 Nothing here imports Flask, the event store, or ``claude.py``; the dependency
-arrow points one way, so the same core can be consumed unchanged by more than
-one adapter. Today the JARVIS context hook consumes it; a Model Context Protocol
-server exposing the same ``retrieve()`` path is the next planned adapter and,
-because the core is self-contained, a thin one. The public surface is
-intentionally small: ``build_index`` to (re)index a corpus into a fresh,
-inactive collection, and ``RagService`` to query the active one with citations,
-abstention and auditing.
+arrow points one way, so the same core is consumed unchanged by two adapters: the
+JARVIS context hook (``app/core/claude.py``) and a Model Context Protocol server
+(``app/rag/mcp_server.py``) that exposes the same ``retrieve()`` path as a
+``search`` tool. The public surface is intentionally small: ``build_index`` to
+(re)index a corpus into a fresh, inactive collection, and ``RagService`` to query
+the active one with citations, abstention and auditing.
 """
 
 from __future__ import annotations
