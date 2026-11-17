@@ -16,6 +16,7 @@ FEATURES = {
     'pattern_engine': _flag('FEATURE_PATTERNS'),
     'insight_surfacing': _flag('FEATURE_INSIGHTS'),
     'rag': _flag('FEATURE_RAG'),
+    'deepgram_stt': _flag('FEATURE_DEEPGRAM_STT'),
 }
 
 

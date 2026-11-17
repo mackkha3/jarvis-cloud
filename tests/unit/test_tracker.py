@@ -81,3 +81,27 @@ class TestRecordAndSummarise:
         summary = tracker.get_summary()
         assert set(summary) == {"today", "month_to_date", "as_of"}
         assert set(summary["today"]) >= {"total", "claude", "openai_tts"}
+
+
+class TestDeepgramSTT:
+    def test_cost_from_env_rate_and_audio_minutes(self, temp_usage, monkeypatch):
+        monkeypatch.setenv("DEEPGRAM_RATE_PER_MIN", "0.0043")  # Deepgram nova-3-ish
+        tracker.record_deepgram_stt(120.0)  # 2 minutes
+        summary = tracker.get_summary()
+        assert summary["today"]["deepgram_stt"] == pytest.approx(0.0086)
+        assert summary["today"]["stt_audio_seconds"] == 120.0
+        assert summary["today"]["total"] == pytest.approx(0.0086)
+
+    def test_no_rate_set_tracks_seconds_but_zero_cost(self, temp_usage, monkeypatch):
+        monkeypatch.delenv("DEEPGRAM_RATE_PER_MIN", raising=False)
+        tracker.record_deepgram_stt(60.0)
+        summary = tracker.get_summary()
+        assert summary["today"]["deepgram_stt"] == 0.0
+        assert summary["today"]["stt_audio_seconds"] == 60.0
+
+    def test_stt_in_month_to_date(self, temp_usage, monkeypatch):
+        monkeypatch.setenv("DEEPGRAM_RATE_PER_MIN", "0.006")
+        tracker.record_deepgram_stt(60.0)  # 1 min -> 0.006
+        summary = tracker.get_summary()
+        assert summary["month_to_date"]["deepgram_stt"] == pytest.approx(0.006)
+        assert summary["month_to_date"]["total"] == pytest.approx(0.006)

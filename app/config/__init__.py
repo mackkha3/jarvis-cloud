@@ -138,6 +138,18 @@ class JarvisConfig(BaseSettings):
         description="OpenAI API key for TTS. Required only if tts_mode=openai.",
     )
 
+    # ===== SPEECH-TO-TEXT (Deepgram) =====
+    deepgram_api_key: str = Field(
+        default="",
+        description="Deepgram API key for server-side STT. "
+                    "Required only if FEATURE_DEEPGRAM_STT is on.",
+    )
+    deepgram_rate_per_min: float = Field(
+        default=0.0,
+        description="Deepgram STT price per audio-minute, for cost tracking. "
+                    "Read from env so no price is hard-coded.",
+    )
+
     # ===== LOGGING =====
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO",
