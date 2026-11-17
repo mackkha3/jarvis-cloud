@@ -308,11 +308,13 @@ def register_voice_routes(app: Flask) -> None:
     def voice_status():
         try:
             from app.voice.tts import backend_status
+            from app.config.features import is_enabled
             status = backend_status()
             return jsonify({
                 "status": "online" if status["kokoro"]["state"] == "ready" else "degraded",
                 "wake_word": "hey_jarvis",
                 "tts": "kokoro",
+                "stt_provider": "deepgram" if is_enabled("deepgram_stt") else "browser",
                 **status,
             })
         except Exception as exc:
@@ -574,6 +576,53 @@ def register_voice_chat_routes(app: Flask) -> None:
             briefing["audio_url"] = audio_url
             return jsonify(briefing)
         return jsonify({"type": None})
+
+    @app.route("/api/voice/transcribe", methods=["POST"])
+    @require_api_key
+    def voice_transcribe():
+        """Server-side STT via Deepgram. Flag-gated; the PWA falls back to the
+        browser recognizer on any non-200 so voice never breaks."""
+        from app.config import get_config
+        from app.config.features import is_enabled
+
+        if not is_enabled("deepgram_stt"):
+            return jsonify({"error": "Not found"}), 404
+
+        _MAX_BYTES = 10 * 1024 * 1024  # ~10 MB
+        _ALLOWED = {"audio/webm", "audio/mp4", "audio/wav", "audio/mpeg", "audio/ogg"}
+
+        mimetype = (request.content_type or "").split(";")[0].strip().lower()
+        if mimetype not in _ALLOWED:
+            return jsonify({"error": "Unsupported media type", "allowed": sorted(_ALLOWED)}), 415
+
+        audio = request.get_data(cache=False)
+        if not audio:
+            return jsonify({"error": "Empty audio body"}), 400
+        if len(audio) > _MAX_BYTES:
+            return jsonify({"error": "Payload too large", "max_bytes": _MAX_BYTES}), 413
+
+        cfg = get_config()
+        from app.voice.stt import transcribe, STTError
+        try:
+            result = transcribe(audio, mimetype, api_key=cfg.deepgram_api_key)
+        except STTError as exc:
+            status = exc.status or 502
+            # Upstream auth failure is the one 4xx we surface as 401 to the caller.
+            http_status = 401 if status == 401 else 502
+            logger.warning("Transcribe failed provider=deepgram status=%s", status)
+            return jsonify({"error": "Transcription failed"}), http_status
+
+        try:
+            from app.usage.tracker import record_deepgram_stt
+            record_deepgram_stt(result["audio_seconds"])
+        except Exception as exc:
+            logger.error("STT usage tracking failed: %s", exc)
+
+        return jsonify({
+            "text": result["text"],
+            "confidence": result["confidence"],
+            "latency_ms": result["latency_ms"],
+        })
 
     @app.route("/api/voice/audio/<filename>", methods=["GET"])
     def voice_audio(filename):

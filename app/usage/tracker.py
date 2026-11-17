@@ -54,7 +54,19 @@ def _month_key():
 
 
 def _empty_day():
-    return {"claude": 0.0, "openai_tts": 0.0, "claude_tokens_in": 0, "claude_tokens_out": 0, "tts_chars": 0}
+    return {
+        "claude": 0.0, "openai_tts": 0.0, "deepgram_stt": 0.0,
+        "claude_tokens_in": 0, "claude_tokens_out": 0, "tts_chars": 0,
+        "stt_audio_seconds": 0.0,
+    }
+
+
+def _deepgram_rate_per_min() -> float:
+    """STT price per audio-minute, from env so no price is hard-coded."""
+    try:
+        return float(os.environ.get("DEEPGRAM_RATE_PER_MIN", "0") or 0)
+    except ValueError:
+        return 0.0
 
 
 def _resolve_rates(model: str):
@@ -103,6 +115,24 @@ def record_openai_tts(characters: int):
         _save(data)
 
 
+def record_deepgram_stt(audio_seconds: float):
+    """Called from the transcribe endpoint after each successful STT call.
+
+    Cost is derived from audio minutes and the env-configured per-minute rate,
+    so STT spend shows on the dashboard next to Claude and TTS.
+    """
+    audio_seconds = max(0.0, float(audio_seconds))
+    cost = (audio_seconds / 60.0) * _deepgram_rate_per_min()
+    with _lock:
+        data = _load()
+        day = _today_key()
+        if day not in data["days"]:
+            data["days"][day] = _empty_day()
+        data["days"][day]["deepgram_stt"] = data["days"][day].get("deepgram_stt", 0.0) + cost
+        data["days"][day]["stt_audio_seconds"] = data["days"][day].get("stt_audio_seconds", 0.0) + audio_seconds
+        _save(data)
+
+
 def get_summary():
     """Returns today + month-to-date totals for dashboard."""
     with _lock:
@@ -114,29 +144,35 @@ def get_summary():
     today_data = data["days"].get(today, {})
     today_claude = today_data.get("claude", 0.0)
     today_tts = today_data.get("openai_tts", 0.0)
-    today_total = today_claude + today_tts
+    today_stt = today_data.get("deepgram_stt", 0.0)
+    today_total = today_claude + today_tts + today_stt
 
     mtd_claude = 0.0
     mtd_tts = 0.0
+    mtd_stt = 0.0
     for day, vals in data["days"].items():
         if day.startswith(month_prefix):
             mtd_claude += vals.get("claude", 0.0)
             mtd_tts += vals.get("openai_tts", 0.0)
-    mtd_total = mtd_claude + mtd_tts
+            mtd_stt += vals.get("deepgram_stt", 0.0)
+    mtd_total = mtd_claude + mtd_tts + mtd_stt
 
     return {
         "today": {
             "total": round(today_total, 4),
             "claude": round(today_claude, 4),
             "openai_tts": round(today_tts, 4),
+            "deepgram_stt": round(today_stt, 4),
             "claude_tokens_in": today_data.get("claude_tokens_in", 0),
             "claude_tokens_out": today_data.get("claude_tokens_out", 0),
             "tts_chars": today_data.get("tts_chars", 0),
+            "stt_audio_seconds": round(today_data.get("stt_audio_seconds", 0.0), 2),
         },
         "month_to_date": {
             "total": round(mtd_total, 4),
             "claude": round(mtd_claude, 4),
             "openai_tts": round(mtd_tts, 4),
+            "deepgram_stt": round(mtd_stt, 4),
         },
         "as_of": datetime.now(_CT).strftime("%H:%M CT"),
     }
